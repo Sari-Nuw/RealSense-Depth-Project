@@ -13,7 +13,7 @@ from PIL import Image
 import pyrealsense2 as py2
 from MonocularDepthEstimation import *
 from EstimatedDepthBackgroundRemoval import *
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import os
 import open3d as o3d
 from sklearn.cluster import KMeans
