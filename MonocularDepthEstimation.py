@@ -1,6 +1,6 @@
 import cv2
 import torch
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 
 def MonocularDepthEstimation(color_frame,min_dist,max_dist):

@@ -13,7 +13,7 @@ from PIL import Image
 import pyrealsense2 as py2
 from MonocularDepthEstimation import *
 from EstimatedDepthBackgroundRemoval import *
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import os
 import open3d as o3d
 from sklearn.cluster import KMeans
@@ -33,13 +33,14 @@ wait = math.floor(interval*60)
 min_dist = 0
 max_dist = 2000
 
-# Setting up connection with Google Drive (sari.nuwayhid@ucdconnect.ie)
+#Setting up connection with Google Drive (sari.nuwayhid@ucdconnect.ie)
 gauth = GoogleAuth()
 gauth.LocalWebserverAuth()
 drive = GoogleDrive(gauth)
 
 #Path under which images are saved
-path = r"c:\Users\nuway\OneDrive\Desktop\Realsense Project\Python Code 3.10\Images\\"
+#path = r"c:\Users\nuway\OneDrive\Desktop\Realsense Project\Python Code 3.10\Images\\"
+path = r'.\Images\\'
 #Checking that path folder exists to save images locally. otherwise create the pathway.
 if not os.path.exists(path):
     os.mkdir(path)
