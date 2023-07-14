@@ -33,10 +33,10 @@ wait = math.floor(interval*60)
 min_dist = 0
 max_dist = 2000
 
-#Setting up connection with Google Drive (sari.nuwayhid@ucdconnect.ie)
-# gauth = GoogleAuth()
-# gauth.LocalWebserverAuth()
-# drive = GoogleDrive(gauth)
+# Setting up connection with Google Drive (sari.nuwayhid@ucdconnect.ie)
+gauth = GoogleAuth()
+gauth.LocalWebserverAuth()
+drive = GoogleDrive(gauth)
 
 #Path under which images are saved
 path = r"c:\Users\nuway\OneDrive\Desktop\Realsense Project\Python Code 3.10\Images\\"
@@ -68,38 +68,38 @@ while True:
 
         # break
 
-        depth_frame = cv2.resize(depth_frame, (640,480), cv2.INTER_CUBIC)
+        # depth_frame = cv2.resize(depth_frame, (640,480), cv2.INTER_CUBIC)
 
-        #Making a copy of the camera depth frame and nomalizing it between 0-2000 for point cloud plotting
-        depth_frame_copy = np.copy(depth_frame)
-        depth_frame_copy = max_dist*((depth_frame_copy - np.min(depth_frame_copy))/(np.max(depth_frame_copy) - np.min(depth_frame_copy)))
-        depth_frame_copy =depth_frame_copy.astype('uint16')
+        # #Making a copy of the camera depth frame and nomalizing it between 0-2000 for point cloud plotting
+        # depth_frame_copy = np.copy(depth_frame)
+        # depth_frame_copy = max_dist*((depth_frame_copy - np.min(depth_frame_copy))/(np.max(depth_frame_copy) - np.min(depth_frame_copy)))
+        # depth_frame_copy =depth_frame_copy.astype('uint16')
 
-        print(np.min(depth_frame))
-        print(np.max(depth_frame))
-        plt.hist(depth_frame, bins=20)
-        plt.show()
+        # print(np.min(depth_frame))
+        # print(np.max(depth_frame))
+        # plt.hist(depth_frame, bins=20)
+        # plt.show()
 
-        print(np.min(depth_frame_copy))
-        print(np.max(depth_frame_copy))
-        plt.hist(depth_frame_copy, bins=20)
-        plt.show()
+        # print(np.min(depth_frame_copy))
+        # print(np.max(depth_frame_copy))
+        # plt.hist(depth_frame_copy, bins=20)
+        # plt.show()
 
-        #Estimating the depth image from the color_frame image
-        moncular_depth_frame = MonocularDepthEstimation(color_frame, min_dist, max_dist)
+        # #Estimating the depth image from the color_frame image
+        # moncular_depth_frame = MonocularDepthEstimation(color_frame, min_dist, max_dist)
 
-        print(np.min(moncular_depth_frame))
-        print(np.max(moncular_depth_frame))
-        plt.hist(moncular_depth_frame, bins=20)
-        plt.show()
+        # print(np.min(moncular_depth_frame))
+        # print(np.max(moncular_depth_frame))
+        # plt.hist(moncular_depth_frame, bins=20)
+        # plt.show()
 
-        EstimatedDepthBackgroundRemoval(color_frame, moncular_depth_frame, min_dist, max_dist)
+        # EstimatedDepthBackgroundRemoval(color_frame, moncular_depth_frame, min_dist, max_dist)
 
-        #contour_img_foreground, contour_img = Contours(color_frame)
+        # #contour_img_foreground, contour_img = Contours(color_frame)
 
-        PointCloud(color_frame,moncular_depth_frame, camera_intrinsics)
-        PointCloud(color_frame,depth_frame_copy, camera_intrinsics)
-        break
+        # PointCloud(color_frame,moncular_depth_frame, camera_intrinsics)
+        # PointCloud(color_frame,depth_frame_copy, camera_intrinsics)
+        # break
 
         #Getting date and time
         now = datetime.now()
