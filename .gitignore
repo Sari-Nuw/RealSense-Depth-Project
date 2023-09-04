@@ -163,3 +163,9 @@ cython_debug/
 Mushroom_Dataset/
 Pictures/
 Timelapse/
+runs/
+#Ignoring client_secrets file with sensitive information
+client_secrets.json
+#Ignoring large model files (YOLO and SAM)
+sam_vit_h_4b8939.pth
+yolov8n.pt
