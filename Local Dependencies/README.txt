@@ -4,5 +4,10 @@
 
 2 - If it is desired for the Image Capture script to upload online then a client_secrets.json file is required
 
+3- First run this command in terminal (install torch and torch vision with CUDA compatibility): 
+	pip install torch torchvision --index-url https://download.pytorch.org/whl/cu117
+
+	Afterwards install the requirments.txt dependencies: pip install -r requirments.txt 
+
 
 
