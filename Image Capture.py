@@ -34,7 +34,7 @@ drive = GoogleDrive(gauth)
 
 #Path under which images are saved
 path = r'.\Pictures\\'
-#Checking that path folder exists to save images locally. otherwise create the pathway.
+#Checking that path folder exists to save images locally. Otherwise create the pathway.
 if not os.path.exists(path):
     os.mkdir(path)
 

@@ -8,11 +8,9 @@ from DepthMap import *
 import time
 from Segment_Crop import *
 
-start = time.time()
-
 sys.path.append("..")
 
-#Reading image and converting to RGB from BGR
+#Reading image
 image = cv2.imread(r'Pictures\Picture Date 27-07-2023 Time 17_26_07.png')
 
 #Converting image to RGB from BGR (cv2 reads as Blue Green Red)
