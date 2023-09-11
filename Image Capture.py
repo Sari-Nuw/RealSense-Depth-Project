@@ -27,10 +27,14 @@ wait = math.floor(interval*60)
 min_dist = 0
 max_dist = 2000
 
+#Online upload
+online_upload = False
+
 #Setting up connection with Google Drive (set up with sari.nuwayhid@ucdconnect.ie)
-gauth = GoogleAuth()
-gauth.LocalWebserverAuth()
-drive = GoogleDrive(gauth)
+if online_upload:
+    gauth = GoogleAuth()
+    gauth.LocalWebserverAuth()
+    drive = GoogleDrive(gauth)
 
 #Path under which images are saved
 path = r'.\Pictures\\'
@@ -87,18 +91,19 @@ while True:
 
 
         #Uploading files to Google Drive.
-        upload_file_list = [path+"Picture {}.png".format(now_str),
-                            path+"Stereo Depth Map {}.png".format(now_str), 
-                            path+"Estimated Depth Map {}.png".format(now_str), 
-                            path+"Contours {}.png".format(now_str), 
-                            path+"Contours Foreground {}.png".format(now_str),]
-        for upload_file in upload_file_list:
-            gfile = drive.CreateFile({'parents':[{'id': '1vOjFlHQCKlqgM3Wrqe8P4Lo5TI5TN034'}]})
-            #Read file and upload
-            gfile.SetContentFile(upload_file)
-            #Removing path from file names
-            gfile['title'] = upload_file.replace(path,'')
-            gfile.Upload()
+        if online_upload:
+            upload_file_list = [path+"Picture {}.png".format(now_str),
+                                path+"Stereo Depth Map {}.png".format(now_str), 
+                                path+"Estimated Depth Map {}.png".format(now_str), 
+                                path+"Contours {}.png".format(now_str), 
+                                path+"Contours Foreground {}.png".format(now_str)]
+            for upload_file in upload_file_list:
+                gfile = drive.CreateFile({'parents':[{'id': '1vOjFlHQCKlqgM3Wrqe8P4Lo5TI5TN034'}]})
+                #Read file and upload
+                gfile.SetContentFile(upload_file)
+                #Removing path from file names
+                gfile['title'] = upload_file.replace(path,'')
+                gfile.Upload()
         print("uploaded")
 
         #Complete measuring time needed for image processing and upload

@@ -5,7 +5,7 @@ from DepthMap import *
 from PIL import Image
 
 #Path to the images
-image_folder = r'Timelapse\Exp3'
+image_folder = r'Timelapse\Test'
 
 #To store the images
 images = []
