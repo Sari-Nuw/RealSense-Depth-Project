@@ -30,7 +30,7 @@ def Pixel_Area(segment):
     #For all contours find area and add to toal area (if more than 100 pixels in size)
     for i in range(len(contours)):
         area = cv2.contourArea(contours[i])
-        if area > 100:
+        if area > 25:
             area_total = area_total + area
     return area_total
 

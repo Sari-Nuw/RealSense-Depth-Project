@@ -30,6 +30,9 @@ max_dist = 2000
 #Online upload
 online_upload = False
 
+#Generate Point Clouds
+pcd_gen = False
+
 #Setting up connection with Google Drive (set up with sari.nuwayhid@ucdconnect.ie)
 if online_upload:
     gauth = GoogleAuth()
@@ -41,6 +44,20 @@ path = r'.\Pictures\\'
 #Checking that path folder exists to save images locally. Otherwise create the pathway.
 if not os.path.exists(path):
     os.mkdir(path)
+if not os.path.exists(path+'Picture\\'):
+    os.mkdir(path+'Picture\\')
+if not os.path.exists(path+'Stereo Depth Map\\'):
+    os.mkdir(path+'Stereo Depth Map\\')
+if not os.path.exists(path+'Estimated Depth Map\\'):
+    os.mkdir(path+'Estimated Depth Map\\')
+if not os.path.exists(path+'Contours\\'):
+    os.mkdir(path+'Contours\\')
+if not os.path.exists(path+'Contours Foreground\\'):
+    os.mkdir(path+'Contours Foreground\\')
+if not os.path.exists(path+'Estimated PCD\\'):
+    os.mkdir(path+'Estimated PCD\\')
+if not os.path.exists(path+'Normalized Stereo PCD\\'):
+    os.mkdir(path+'Normalized Stereo PCD\\')
 
 while True:
     try:
@@ -61,49 +78,53 @@ while True:
         monocular_depth_frame = MonocularDepthEstimation(color_frame, min_dist, max_dist)
 
         #Saving image
-        written = cv2.imwrite(path+"Picture {}.png".format(now_str), color_frame)
+        written = cv2.imwrite(path+"Picture\Picture {}.png".format(now_str), color_frame)
 
         #Generating and saving the stereo depth map
         depth_img = DepthMap(depth_frame, min_dist, max_dist)
-        depth_img.save(path+"Stereo Depth Map {}.png".format(now_str))
+        depth_img.save(path+"Stereo Depth Map\Stereo Depth Map {}.png".format(now_str))
         
         #Generating and saving the estimated depth map
         estimated_depth_img = DepthMap(monocular_depth_frame, min_dist, max_dist)
-        estimated_depth_img.save(path+"Estimated Depth Map {}.png".format(now_str))
+        estimated_depth_img.save(path+"Estimated Depth Map\Estimated Depth Map {}.png".format(now_str))
 
         #Generating the contouors image for the foreground
         contour_img_foreground, contour_img = Contours(color_frame, 100, 200)
         #Saving the contoured image to the folder
-        contour_img.save(path+"Contours {}.png".format(now_str))
-        contour_img_foreground.save(path+"Contours Foreground {}.png".format(now_str))
+        contour_img.save(path+"Contours\Contours {}.png".format(now_str))
+        contour_img_foreground.save(path+"Contours Foreground\Contours Foreground {}.png".format(now_str))
 
-        #Generating point cloud from color and estimated depth images
-        estimated_pcd = PointCloud(color_frame,monocular_depth_frame, camera_intrinsics)
-        o3d.io.write_point_cloud(path+"Estimated PCD {}.pcd".format(now_str), estimated_pcd)
+        #Generating point clouds from color and estimated depth images
+        if pcd_gen:
+            estimated_pcd = PointCloud(color_frame,monocular_depth_frame, camera_intrinsics)
+            o3d.io.write_point_cloud(path+"Estimated PCD\Estimated PCD {}.pcd".format(now_str), estimated_pcd)
 
-        #Making a copy of the camera depth frame and nomalizing it between 0-2000 for point cloud plotting
-        depth_frame_copy = np.copy(depth_frame)
-        depth_frame_copy = (max_dist - min_dist)*((depth_frame_copy - np.min(depth_frame_copy))/(np.max(depth_frame_copy) - np.min(depth_frame_copy)))
-        depth_frame_copy = depth_frame_copy.astype('uint16')
-        #Generating point cloud from color and RealSense camera normalized depth images
-        normalized_stereo_pcd = PointCloud(color_frame,depth_frame_copy, camera_intrinsics)
-        o3d.io.write_point_cloud(path+"Normalized Stereo PCD {}.pcd".format(now_str), normalized_stereo_pcd)
+            #Making a copy of the camera depth frame and nomalizing it between 0-2000 for point cloud plotting
+            depth_frame_copy = np.copy(depth_frame)
+            depth_frame_copy = (max_dist - min_dist)*((depth_frame_copy - np.min(depth_frame_copy))/(np.max(depth_frame_copy) - np.min(depth_frame_copy)))
+            depth_frame_copy = depth_frame_copy.astype('uint16')
+            
+            #Generating point cloud from color and RealSense camera normalized depth images
+            normalized_stereo_pcd = PointCloud(color_frame,depth_frame_copy, camera_intrinsics)
+            o3d.io.write_point_cloud(path+"Normalized Stereo PCD\\Normalized Stereo PCD {}.pcd".format(now_str), normalized_stereo_pcd)
 
-
+        #NOTE: Uploading to shared drive but not uploading into separate folders only root folder
         #Uploading files to Google Drive.
         if online_upload:
-            upload_file_list = [path+"Picture {}.png".format(now_str),
-                                path+"Stereo Depth Map {}.png".format(now_str), 
-                                path+"Estimated Depth Map {}.png".format(now_str), 
-                                path+"Contours {}.png".format(now_str), 
-                                path+"Contours Foreground {}.png".format(now_str)]
+            upload_file_list = [path+"Picture\Picture {}.png".format(now_str),
+                                path+"Stereo Depth Map\Stereo Depth Map {}.png".format(now_str), 
+                                path+"Estimated Depth Map\Estimated Depth Map {}.png".format(now_str), 
+                                path+"Contours\Contours {}.png".format(now_str), 
+                                path+"Contours Foreground\Contours Foreground {}.png".format(now_str)]
             for upload_file in upload_file_list:
-                gfile = drive.CreateFile({'parents':[{'id': '1vOjFlHQCKlqgM3Wrqe8P4Lo5TI5TN034'}]})
+                gfile = drive.CreateFile({'parents':[{'id': '1bB4sbq4t-PdoqJW7wW6ZTVqg1kPHD9dE', 'teamDriveID':'0AHgXiNP-67-sUk9PVA'}]})
                 #Read file and upload
                 gfile.SetContentFile(upload_file)
                 #Removing path from file names
-                gfile['title'] = upload_file.replace(path,'')
-                gfile.Upload()
+                file_name = upload_file.replace(path,'')
+                file_name = file_name.split('\\',1)[1]
+                gfile['title'] = file_name
+                gfile.Upload(param={'supportsTeamDrives': True})
         print("uploaded")
 
         #Complete measuring time needed for image processing and upload
