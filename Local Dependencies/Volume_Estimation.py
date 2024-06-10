@@ -38,8 +38,23 @@ def Pixel_Area(segment):
 # Only works for a object directly in line of sight of the camera. Modifiable for different angles?
 # From online: Distance to object (mm) = focal length (mm) * real object area (mm2) * image area (pixels) / object area (pixels) * sensor area (mm2)
 # -> Real object area (mm2) = [Distance to object (mm) * object area (pixels) * sensor area (mm2)] / [focal length (mm) * image area (pixels)]
-def Real_Area(image, average_depth, area_total):
+def Realsense_Area(image, average_depth, area_total):
     #From D345 camera specs focal length in mm, sensor area in mm^2
+    focal_length = 1.93 
+    sensor_width = 14.67
+    sensor_height = 8.5
+    sensor_area = sensor_width * sensor_height 
+    #Size of image in pixels
+    image_area = image.shape[0]*image.shape[1]
+
+    #Calculating the object area
+    object_area = (average_depth * area_total * sensor_area)/(focal_length *image_area)
+    print('Object area (mm2): ' + str(object_area))
+
+    return object_area
+
+def Timelapse_Area(image, average_depth, area_total):
+    #From Wingscapes Timelapsecam Pro camera specs focal length in mm, sensor area in mm^2
     focal_length = 1.93 
     sensor_width = 14.67
     sensor_height = 8.5

@@ -1,6 +1,7 @@
-path: C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python Code 3.10\Mushroom_Dataset # dataset root dir
+#path: C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python Code 3.10\Mushroom_Dataset # dataset root dir
+path: C:\Users\nuway\OneDrive\Desktop\Realsense Project\Mushroom Pictures\Small Timelapse Dataset\
 train: train  # train images (relative to 'path')
-val: train  # val images (relative to 'path')
+val: val  # val images (relative to 'path')
 
 # Classes
 names:

@@ -37,4 +37,4 @@ def MonocularDepthEstimation(color_frame,min_dist,max_dist):
     #Depth map normalized from 0-2000 (same parameters of DepthMap function) but this is just a relative depth NOT ABSOLUTE
     depth_map_predicted = cv2.normalize(depth_map_predicted, None, int(min_dist), int(max_dist), norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
 
-    return depth_map_predicted
+    return depth_map_predicted.astype(int)
