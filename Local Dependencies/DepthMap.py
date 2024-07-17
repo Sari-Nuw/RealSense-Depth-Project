@@ -25,9 +25,9 @@ def DepthMap(Array, dist_min, dist_max):
             #Calculating grayscale 'percentage'
             percentage = (depth - dist_min)/dist_max
             #Setting pixel values in grayscale
-            pixels[x][y][0] = round((1-percentage)*255) 
-            pixels[x][y][1] = round((1-percentage)*255)
-            pixels[x][y][2] = round((1-percentage)*255)
+            pixels[x][y][0] = round(percentage*255) 
+            pixels[x][y][1] = round(percentage*255)
+            pixels[x][y][2] = round(percentage*255)
     
     #Generating image from values
     pixels = np.ascontiguousarray(pixels)

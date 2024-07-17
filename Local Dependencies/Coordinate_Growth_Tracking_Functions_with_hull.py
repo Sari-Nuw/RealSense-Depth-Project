@@ -6,8 +6,8 @@ def coordinate_iou(poly,base):
     # print('iou')
     # print(poly)
     # print(base)
-    poly1 = Polygon(poly)
-    poly2 = Polygon(base)
+    poly1 = Polygon(poly)#.buffer(0)
+    poly2 = Polygon(base)#.buffer(0)
     intersect = poly1.intersection(poly2).area
     union = poly1.union(poly2).area
     return intersect / union

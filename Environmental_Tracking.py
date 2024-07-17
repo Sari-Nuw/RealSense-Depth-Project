@@ -6,7 +6,7 @@ import json
 import pandas as pd
 from PIL import Image, ExifTags
 
-def environmental_variable_prep(working_folder,image_files):
+def environmental_variable_prep(working_folder,result_path,image_files,cluster_lines):
     working_folder = working_folder +r"\\"
     # working_folder = "PATH TO FOLDER WHERE THE THREE CSVs AND THE TIMELAPSE IMAGES ARE SAVED"
     environmental_files = os.listdir(working_folder)
@@ -127,8 +127,17 @@ def environmental_variable_prep(working_folder,image_files):
     result_df = result_df.drop(['closest_Time'], axis=1)
     # Concatenate the result with df1
     df1 = pd.concat([df1, result_df], axis=1)
+
+    #Concatenation of the growth curves to the environmental data 
+    result_list = np.array(cluster_lines).T.tolist()
+    cluster_columns = []
+    for i in range(len(result_list[0])):
+        cluster_columns.append('Cluster_#{}'.format(i))
+    result_df = pd.DataFrame(result_list,columns = cluster_columns)
+    df1 = pd.concat([df1,result_df], axis=1)
+
     # Display the result
-    df1.to_csv(working_folder + 'timeseries_and_files_combined.csv', index=False)
+    df1.to_csv(result_path + 'files_and_env_data.csv', index=False)
 
     #Returning array with all the environmental data
     environmental_variables = df1.to_numpy() 

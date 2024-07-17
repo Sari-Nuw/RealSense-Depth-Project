@@ -3,9 +3,10 @@ import numpy as np
 import cv2
 from shapely.geometry import Polygon, mapping
 from Coordinate_Growth_Tracking_Functions import *
+from Depth_Estimation import *
 from UliEngineering.Math.Coordinates import BoundingBox
 from Environmental_Tracking import *
-from Mask_Generator_Utils_Depth import *
+from Mask_Generator_Utils import *
 
 #Different utility options#
 #Growth tracking option
@@ -62,17 +63,19 @@ test_set = get_test_set(test_set_path)
 print(test_set)
 
 #Loading models prediction and depth estimation models
-mushroom_model,substrate_model,visualizer,pipe = load_models_depth(configs_folder,mushroom_architecture_selected,substrate_architecture_selected,use_device)
+#Not depth option
+mushroom_model,substrate_model,visualizer = load_models(configs_folder,mushroom_architecture_selected,substrate_architecture_selected,use_device)
 
 #Finding the average pixel size of the substrate in the images
 averaged_length_pixels = substrate_processing(substrate_model,test_set,test_set_path)
 
 #Iterating through the images and performing the predictions and depth estimations
-images,image_files,data,polygons,polygons_info,polygons_depth_info,stereo_depth_images,estimated_depth_images,color_estimated_depth_images,img_size = image_processing_depth(0.5,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,pipe,stereo_option,env_option)
+#Not depth option
+images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size = image_processing(0.5,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,stereo_option,env_option)
 
 #Sorting clusters for tracking
 if tracking_option:
-    polygons,polygons_info,polygons_depth_info = cluster_sort_depth(polygons,polygons_info,polygons_depth_info)
+    polygons,polygons_info = cluster_sort(polygons,polygons_info)
 
 if annotation_option:
     annotations = get_annotations('hungary_annotations.txt')
@@ -88,7 +91,6 @@ i = 0
 for polygon in polygons:
     #Copying the current image for processing
     img = np.copy(images[i])
-    depth_img_copy = np.copy(estimated_depth_images[i])
     image_copy = (img, cv2.COLOR_RGB2BGR)[0]
     full_image = np.copy(images[i])
     if cluster_sizing_option:
@@ -112,33 +114,32 @@ for polygon in polygons:
                 y_diff = bounding.maxy - bounding.miny
                 #Drawing the horizontal and vertical sizing lines on the image
                 segments,numbering = cluster_sizing(bounding,x_diff,y_diff,poly,sizing_image,numbering)
-                cluster_segments.append([i+1,j,Polygon(poly).area,polygons_info[i][j],x_diff,y_diff,segments,polygons_depth_info[i][j]])
+                cluster_segments.append([i+1,j,Polygon(poly).area,polygons_info[i][j],x_diff,y_diff,segments])
             #Isolate and save the cluster from the original image
-            box_image,depth_box_image,local_poly = process_cluster_depth(image_copy,depth_img_copy,poly,bounding,working_folder,i,j)
+            box_image,local_poly = process_cluster(image_copy,poly,bounding,working_folder,i,j)
             #Saving the image with outlined clusters
             cv2.polylines(full_image, np.int32([poly]), True, (255, 0, 0), 5)
             cv2.putText(full_image, str(j), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
             if annotation_option:
                 annotation_iou(annotations[i],poly,full_image,centre)
+            #Getting the estimated depth for estimated and stereo depths (NEEDS WORK)
             if stereo_option:
-                #Getting the estimated depth for estimated and stereo depths (NEEDS WORK)
                 polygon_coordinates = tuple(tuple(map(int,tup)) for tup in mapping(Polygon(poly))['coordinates'][0])
-                #avg_depth = Depth_Estimation(polygon_coordinates,estimated_depth_images[i])
                 #Estimating the avergae distance of the cluster from the camera
                 avg_stereo_depth = Stereo_Depth_Estimation(polygon_coordinates,stereo_depth_images[i])
                 cv2.putText(full_image, str(avg_stereo_depth) + ' cm', (int(centre.x),int(centre.y)+60), cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
             #Saving the image information for an individual cluster in numpy array format
             if array_option:
-                save_cluster_array_depth(sizing_image,poly,centre,box_image,depth_box_image,local_poly,working_folder,i,j)
+                save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_folder,i,j)
             cluster_track[i].append(j)
         j += 1
     #Saving image in various forms
-    save_image_depth(working_folder,full_image,sizing_image,estimated_depth_images,color_estimated_depth_images,cluster_sizing_option,i)
+    save_image(working_folder,full_image,sizing_image,cluster_sizing_option,i)
     if cluster_sizing_option:
         cluster_segments.append([])
         #Saving the image information in numpy array format
         if array_option:
-            save_image_array_depth(full_image,depth_img_copy,polygon,working_folder,i)
+            save_image_array(full_image,polygon,working_folder,i)
     print(i)
     i += 1
 
@@ -152,9 +153,8 @@ if env_option:
 
 #Writing information from cluster_segments to excel file
 if cluster_sizing_option:
-    write_cluster_sizing_depth(cluster_segments,working_folder)
+    write_cluster_sizing(cluster_segments,working_folder)
         
 #Plotting the growth curves
 if tracking_option:
     plot_growth(polygons,x_axis,lines)
-    
