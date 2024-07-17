@@ -1,8 +1,4 @@
-import os
-import numpy as np
-import cv2
 from shapely.geometry import Polygon, mapping
-from Coordinate_Growth_Tracking_Functions import *
 from Depth_Estimation import *
 from UliEngineering.Math.Coordinates import BoundingBox
 from Environmental_Tracking import *

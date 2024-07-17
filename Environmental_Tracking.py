@@ -1,8 +1,5 @@
-from matplotlib import pyplot as plt
-import copy
 import numpy as np
 import os
-import json
 import pandas as pd
 from PIL import Image, ExifTags
 

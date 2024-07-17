@@ -1,34 +1,15 @@
 import os
-import torch
 import mmcv
 from mmengine import Config
 from mmdet.apis import inference_detector,init_detector
 import numpy as np
 import cv2
-from shapely.geometry import Polygon
 from concave_hull import concave_hull_indexes
-from Coordinate_Growth_Tracking_Functions import *
+from Mask_Generator_Utils_Common import *
 from Segment_Crop import *
 from mmdet.registry import VISUALIZERS
 from Environmental_Tracking import *
 import csv
-
-def annotation_iou(annotations,poly,full_image,centre):
-	iou_max = 0
-	for annotation in annotations:
-		iou = coordinate_iou(poly,annotation)
-		if  iou > iou_max:
-			iou_max = iou
-	cv2.putText(full_image, str(iou_max)[:4], (int(centre.x),int(centre.y)-10), cv2.FONT_HERSHEY_COMPLEX, 5, (0,255,0), 8, cv2.LINE_AA)
-
-#Checking if CUDA is available on the device running the program
-def check_cuda():
-	if torch.cuda.is_available():
-		use_device = "cuda"
-	else:
-		use_device = "cpu"
-	print(use_device)
-	return use_device
 
 #Sorting clusters for tracking
 def cluster_sort(polygons,polygons_info):
@@ -61,100 +42,77 @@ def cluster_sort(polygons,polygons_info):
 
 	return polygons,polygons_info
 
-#Getting annotations from text file (JSON Coco format)
-def get_annotations(text_file):
-	#Pathway to json file
-	with open(text_file, 'r') as openfile:
-		# Reading from json file
-		object = openfile.read()
+#Using intersection over union method to track the same mushrooms for coordinate lists
+def coordinate_sort(polygons,basis,polygons_info,baseline):
+    temp = []
+    temp_baseline = []
+    #Iterate through the 'base polygons'
+    for base in basis:
+        #Set maximum iou to 0 (no intersection)
+        iou_max = 0
+        #Iterate through the next set of bounding boxes
+        i = 0
+        for polygon in polygons:
+            #Looking through normal or empty boxes
+            if len(base) > 1:
+                poly_iou = coordinate_iou(polygon,base)
+                if poly_iou > iou_max:
+                    iou_max = poly_iou
+                    #if check_size(polygon,base):
+                    best_fit = [polygon,polygons_info[i]]  
+            i += 1       
 
-	#To store the image_id of the polygons
-	image_id = []
+        #Setting best fit box 
+        if (iou_max) >= 0.25:
+            temp.append(best_fit)
+        else:
+            temp.append([[0],[0]])
 
-	#Extracting image id's from the json file
-	index = 0
-	while index < len(object):
-		#Find each instance of "image_id":
-		index = object.find('\"image_id\":', index)
-		if index == -1:
-			break
-		#Skip to the number
-		index = index + 11
-		#Isolate and save the number
-		split_index = object.find(',',index)
-		id = object[index:split_index]
-		image_id.append(int(id))
+    #Adding possible old boxes to the temporary baseline
+    i = 0
+    for poly in temp[0]:
+        #If bounding box is not empty baseline is not required
+        if len(poly) > 1:
+            temp_baseline.append([0])
+        else:
+            temp_baseline.append(baseline[i])
+        i += 1
+    
+    #Checking to see if an old box has returned
+    for polygon in polygons:
+        iou_max = 0
+        i = 0
+        for previous in temp_baseline:
+            if len(previous) > 1:
+                poly_iou = coordinate_iou(polygon,previous)
+                if poly_iou > iou_max:
+                    iou_max = poly_iou
+                    best_fit = [polygon,polygons_info[i]]
+                    #to locate position of the old box
+                    location = i
+            i += 1
+        if iou_max >= 0.5:
+            temp[location] = best_fit
 
-	#To store the polygon values linked to each image
-	images = [[] for _ in range(max(image_id))]
+    if basis != []:
+        i = 0
+        for polygon in polygons:
+            #Checking for boxes not yet included
+            included = False 
+            for base in temp:
+                if not isinstance(base[0],int): 
+                    if len(polygon) == len(base[0]):   
+                        if np.allclose(base[0],polygon): 
+                            included = True
+            #Add the new box if it is not included
+            if not included:
+                temp.append([polygon,polygons_info[i]]) 
+            i += 1
+    
+    polygons_temp = [x[0] for x in temp]
+    info_temp = [x[1] for x in temp]
 
-	#Getting the polygon values
-	index = 0
-	#To iterate through the image_ids 
-	id_count = 0 
-	id_index = image_id[id_count] 
-	broke = False
-	while index < len(object):
-		polygons = []
-		current_id = id_index
-		while id_index == current_id:
-			#Finding the polygon segment
-			index = object.find('\"segmentation\":[[', index)
-			if index == -1:
-				break
-			index = index + 17
-			#Isolating the segment
-			split_index = object.find(']',index)
-			bounding = object[index:split_index]
-			bounding = bounding.split()
-			polygons.append(bounding)
-			#Iterating the id_count to know which image the polygon belongs to
-			id_count += 1
-			if id_count < len(image_id):
-				id_index = image_id[id_count]
-			else:
-				broke = True
-				id_index += 1
-				break
-		#Saving the polygons to the correct image number
-		images[id_index-2].append(polygons)
-		if broke:
-			break
-
-	#Converting the polygons from string to int and pairing each two x,y values
-	images_int = []
-	for image in images:
-		polygons_int = []
-		for polygons in image[0]:
-			polygons = polygons[0]
-			index = 0
-			pair = []
-			polygon_int = []
-			while index < len(polygons):
-				split_index = polygons.find(',',index)
-				if split_index == -1:
-					num = polygons[index:]
-					index = len(polygons)
-				else:
-					num = polygons[index:split_index]
-					index = split_index + 1
-				pair.append(int(float(num)))
-				if len(pair) == 2:
-					polygon_int.append(pair)
-					pair = []
-			polygons_int.append(np.asarray(polygon_int))
-		images_int.append(polygons_int)
-		
-	return(images_int)
-
-#Getting image files
-def get_test_set(test_set_path):
-	test_set = sorted(os.listdir(test_set_path))
-	test_set_length = len(os.listdir(test_set_path))
-	test_set = []
-	for i in range(test_set_length):
-		test_set.append('img ({}).JPG'.format(i+1))
-	return test_set
+    return polygons_temp,info_temp
 
 #Iterating through the images and performing the predictions and depth estimations
 def image_processing(confidence_score_threshold,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,stereo_option,env_option):
@@ -266,83 +224,6 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 
 	return 	images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size
 
-#Gathering the information from individual clusters across images to be able to track their growth
-def line_setup(polygons,img_size):
-
-	#Sizing segmented areas from the images
-	mask_sizes = [[] for _ in range(len(polygons))]
-	i = 0
-	for polygon in polygons:
-		for poly in polygon:
-			#Getting area of each polygon
-			if len(poly) > 1:
-				p = Polygon(poly)
-				segment = round((p.area/img_size*100),4)
-				mask_sizes[i].append(segment)
-			else:
-				mask_sizes[i].append(0)
-		i += 1
-
-	#To store all the different lines based on total number of 'box points' found
-	lines = [[] for _ in range(len(polygons[-1]))]
-	for i in range(len(mask_sizes)):
-		for j in range(len(polygons[i])):
-			if mask_sizes[i][j] == 0:
-				lines[j].append(float('nan'))
-			else:
-				lines[j].append(mask_sizes[i][j])
-
-	#Iterating across each line
-	for line in lines:
-		#Iterating across each point in the lines
-		i = 0
-		while i < len(line):
-			base = line[i]
-			#Skipping beggining section where the region of interest does not exist
-			while math.isnan(base):
-				i += 1
-				if i >= len(line):
-					break
-				base = line[i]
-			#Skipping sections where region of interest is present many times in a row
-			while base >= 0:
-				i += 1
-				if i >= len(line):
-					break
-				base = line[i]
-			#Counting how many times the region of interest was missed
-			count = 1
-			while math.isnan(base):
-				i += 1
-				if i >= len(line):
-					break
-				count += 1
-				base = line[i]
-			#Interpolating and assigning ther interpolated values to the empty sections
-			if i <= len(line):
-				interpolation = (base - line[i-(count)])/count
-				j = 1
-				while count > 1:
-					line[i-j] = base - interpolation*j
-					count -= 1
-					j += 1
-
-	#Initializing x-axis (/2 to convert Time to hours if in series)
-	x_axis = np.linspace(0,len(mask_sizes),num = len(mask_sizes))#/2
-
-	#Trimming empty sections of lines 
-	for i in range(len(polygons[-1])):
-		number = False
-		j = 0
-		#Skipping over beggining sections of lines if they are emtpy (nan)
-		while number == False and j < len(lines[i]):
-			if ~np.isnan(lines[i][j]):
-				number = True 
-			j += 1
-		print('lines ', lines[i])
-
-	return lines,x_axis
-
 #Loading models prediction
 def load_models(configs_folder,mushroom_architecture_selected,substrate_architecture_selected,use_device):
 	
@@ -367,28 +248,6 @@ def load_models(configs_folder,mushroom_architecture_selected,substrate_architec
 
 
 	return mushroom_model,substrate_model,visualizer
-
-#Erode the image
-def mask_erosion(cluster_depth_mask,kernel_size=21,iterations=3):
-    
-    kernel = np.ones((kernel_size, kernel_size), np.uint8) 
-
-    img_eroded = cv2.erode(cluster_depth_mask, kernel, iterations=iterations) 
-
-    img_eroded[img_eroded == 0] = np.nan
-    
-    return img_eroded
-
-#Plotting the growth curves
-def plot_growth(polygons,x_axis,lines):
-    fig, axs = plt.subplots()
-    for i in range(len(polygons[-1])):
-        axs.plot(x_axis,lines[i], label = 'Cluster {}'.format(i))
-    #Displaying the graphs
-    axs.set_xlabel('Image')
-    axs.set_ylabel('Relative Size by Pixel Number')
-    axs.legend()
-    plt.show()
 
 #Isolate the cluster from the original image
 def process_cluster(image_copy,poly,bounding,working_folder,i,j):
@@ -450,29 +309,6 @@ def save_image_array(full_image,polygon,working_folder,i):
 				binary_mask[point[1],point[0]] = 1
 		array.append(binary_mask)
 	np.save(working_folder + "\Arrays\RGB_image ({})".format(i+1),array)
-
-
-#Detecting and sizing the substrate in the image
-def substrate_processing(substrate_model,test_set,test_set_path):
-
-	detected_length_pixels = []
-
-	for test_img in test_set:
-
-		# load the image and color correct
-		img = mmcv.imread(test_set_path + test_img)
-		img = mmcv.image.bgr2rgb(img)
-
-		#Substrate segmentation inference
-		substrate_result = inference_detector(substrate_model, img).pred_instances
-				
-		# collect substrate length data
-		detected_length_pixels.append(substrate_result[0]["bboxes"].cpu().numpy()[0][2] - substrate_result[0]["bboxes"].cpu().numpy()[0][0])
-
-	# calculate the substrate length average
-	averaged_length_pixels = sum(detected_length_pixels)/len(detected_length_pixels)
-
-	return averaged_length_pixels
 
 #Writing information from cluster_segments to excel file
 def write_cluster_sizing(cluster_segments,working_folder):
