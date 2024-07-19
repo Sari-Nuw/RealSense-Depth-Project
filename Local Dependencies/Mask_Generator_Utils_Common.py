@@ -8,6 +8,9 @@ import os
 import mmcv
 from mmdet.apis import inference_detector,init_detector
 from matplotlib import pyplot as plt
+from mmdet.structures.det_data_sample import DetDataSample#			!!!!!!!!!!!!!!
+from mmengine.structures.instance_data import InstanceData#			!!!!!!!!!!!!!!
+import torchvision.ops.boxes as bops#			!!!!!!!!!!!!!!
 
 def annotation_iou(annotations,poly,full_image,centre):
 	iou_max = 0
@@ -85,35 +88,97 @@ def coordinate_iou(poly,base):
     union = poly1.union(poly2).area
     return intersect / union
 
+## dict to MMDetection InstanceData class
+def dict_to_instance_data(instance_dict):#			!!!!!!!!!!!!!!
+    instance_data = InstanceData()
+    for key, value in instance_dict.items():
+        setattr(instance_data, key, value)
+    return instance_data
+
+## dict to MMDetection DetDataSample class
+def dict_to_det_data_sample(data_dict):#			!!!!!!!!!!!!!!
+    det_data_sample = DetDataSample()
+    for key, value in data_dict.items():
+        if isinstance(value, dict):
+            # If the value is a dictionary, we assume it is an InstanceData
+            setattr(det_data_sample, key, dict_to_instance_data(value))
+        else:
+            setattr(det_data_sample, key, value)
+    return det_data_sample
+
+def delete_low_confidence_predictions(result,confidence_score_threshold=0.5):#			!!!!!!!!!!!!!!
+    result = result.cpu().numpy().to_dict()
+    low_conf_indices = []
+    ## find which predictions are of low classification/confidence score and keep their index for deletion
+    for idx in range(len(result["pred_instances"]["scores"])):
+        if result["pred_instances"]["scores"][idx]<confidence_score_threshold:
+            low_conf_indices.append(idx)    
+
+    ## delete from all components of the result variable the instances with low classification/confidence score
+    result["pred_instances"]["bboxes"] = np.delete(result["pred_instances"]["bboxes"],low_conf_indices, axis=0)
+    result["pred_instances"]["scores"] = np.delete(result["pred_instances"]["scores"],low_conf_indices, axis=0)
+    result["pred_instances"]["masks"] = np.delete(result["pred_instances"]["masks"],low_conf_indices, axis=0)
+    result["pred_instances"]["labels"] = np.delete(result["pred_instances"]["labels"],low_conf_indices, axis=0)
+
+    return dict_to_det_data_sample(result)
+
 #Check for overlapping predictions and remove the result with lower confidence
-def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.8):
-
+def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.8):#			!!!!!!!!!!!!!!
+    result = result.cpu().numpy().to_dict()
     to_delete = []
-
     ## iterate through all existing pairs of predictions
-    for idx in range(len(result)):
-        if idx+1 < len(result):
-            for idy in range(idx+1,len(result)):
-                ## create the pair of bounding boxes to be examined
-                box1 = result[idx][1]
-                box2 = result[idy][1]
-                ## calculate iou of bounding boxes pair
-                iou = box_iou(box1, box2)
-                ## if iou is above a defined threshold the two prediction are referring to the same instance,
-                ## so we find the one with the lower classification/confidence score and keep its index to be deleted
-                print('check threshold')
-                if iou>iou_threshold:
-                    print('removed')
-                    if result[idx][0]>result[idy][0]:
-                        to_delete.append(idy)
-                    else:
-                        to_delete.append(idx)
+    for idx in range(len(result["pred_instances"]["bboxes"])):
+        for idy in range(idx+1,len(result["pred_instances"]["bboxes"])):
+            ## create the pair of bounding boxes to be examined
+            box1 = torch.tensor([result["pred_instances"]["bboxes"][idx]], dtype=torch.float)
+            box2 = torch.tensor([result["pred_instances"]["bboxes"][idy]], dtype=torch.float)
+            ## calculate iou of bounding boxes pair
+            iou = bops.box_iou(box1, box2)
+            ## if iou is above a defined threshold the two prediction are referring to the same instance,
+            ## so we find the one with the lower classification/confidence score and keep its index to be deleted
+            if iou>iou_threshold:
+                if result["pred_instances"]["scores"][idx]>result["pred_instances"]["scores"][idy]:
+                    to_delete.append(idy)
+                else:
+                    to_delete.append(idx)
     
     ## delete from all components of the result variable the overlapping instances with classification/confidence score
-    for id in to_delete:
-        result[id][3] = []
+    result["pred_instances"]["bboxes"] = np.delete(result["pred_instances"]["bboxes"],to_delete, axis=0)
+    result["pred_instances"]["scores"] = np.delete(result["pred_instances"]["scores"],to_delete, axis=0)
+    result["pred_instances"]["masks"] = np.delete(result["pred_instances"]["masks"],to_delete, axis=0)
+    result["pred_instances"]["labels"] = np.delete(result["pred_instances"]["labels"],to_delete, axis=0)
 
-    return result
+    return dict_to_det_data_sample(result)
+
+# #Check for overlapping predictions and remove the result with lower confidence
+# def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.8):
+
+#     to_delete = []
+
+#     ## iterate through all existing pairs of predictions
+#     for idx in range(len(result)):
+#         if idx+1 < len(result):
+#             for idy in range(idx+1,len(result)):
+#                 ## create the pair of bounding boxes to be examined
+#                 box1 = result[idx][1]
+#                 box2 = result[idy][1]
+#                 ## calculate iou of bounding boxes pair
+#                 iou = box_iou(box1, box2)
+#                 ## if iou is above a defined threshold the two prediction are referring to the same instance,
+#                 ## so we find the one with the lower classification/confidence score and keep its index to be deleted
+#                 #print('check threshold')
+#                 if iou>iou_threshold:
+#                     #print('removed')
+#                     if result[idx][0]>result[idy][0]:
+#                         to_delete.append(idy)
+#                     else:
+#                         to_delete.append(idx)
+    
+#     ## delete from all components of the result variable the overlapping instances with classification/confidence score
+#     for id in to_delete:
+#         result[id][3] = []
+
+#     return result
 
 #Getting annotations from text file (JSON Coco format)
 def get_annotations(text_file):
@@ -335,6 +400,11 @@ def mask_erosion(cluster_depth_mask,kernel_size=21,iterations=3):
     
     return img_eroded
 
+def pixel_absolute_area(pixel_area,averaged_length_pixels,substrate_size):
+
+	return pixel_area*substrate_size*substrate_size/(averaged_length_pixels*averaged_length_pixels)
+
+
 #Plotting the growth curves
 def plot_growth(polygons,x_axis,lines):
     fig, axs = plt.subplots()
@@ -347,18 +417,30 @@ def plot_growth(polygons,x_axis,lines):
     plt.show()
 	
 #Detecting and sizing the substrate in the image
-def substrate_processing(substrate_model,test_set,test_set_path):
+def substrate_processing(substrate_model,test_set,test_set_path,working_folder):
 
 	detected_length_pixels = []
 
+	i = 0
 	for test_img in test_set:
 
 		# load the image and color correct
 		img = mmcv.imread(test_set_path + test_img)
 		img = mmcv.image.bgr2rgb(img)
 
+		substrate_img = img.copy()
+
 		#Substrate segmentation inference
 		substrate_result = inference_detector(substrate_model, img).pred_instances
+
+		#Draw bounding boxes on images
+		for result in substrate_result:
+			sub_result = result["bboxes"].cpu().numpy()[0]
+			cv2.rectangle(substrate_img,(int(sub_result[0]),int(sub_result[1])),(int(sub_result[2]),int(sub_result[3])),(0,0,255),5)
+
+		#Save images
+		cv2.imwrite(working_folder + "/Substrate/images ({}).JPG".format(i+1), cv2.cvtColor(substrate_img,cv2.COLOR_RGB2BGR))
+		i += 1
 				
 		# collect substrate length data
 		detected_length_pixels.append(substrate_result[0]["bboxes"].cpu().numpy()[0][2] - substrate_result[0]["bboxes"].cpu().numpy()[0][0])
@@ -366,5 +448,5 @@ def substrate_processing(substrate_model,test_set,test_set_path):
 	# calculate the substrate length average
 	averaged_length_pixels = sum(detected_length_pixels)/len(detected_length_pixels)
 
-	return averaged_length_pixels
+	return averaged_length_pixels, detected_length_pixels
 

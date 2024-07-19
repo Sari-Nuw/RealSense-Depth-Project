@@ -10,6 +10,7 @@ from Segment_Crop import *
 from mmdet.registry import VISUALIZERS
 from Environmental_Tracking import *
 import csv
+from UliEngineering.Math.Coordinates import BoundingBox
 
 #Sorting clusters for tracking
 def cluster_sort(polygons,polygons_info):
@@ -143,7 +144,7 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 		#Read stereo depth map
 		if stereo_option:
 			break
-			# depth_img = cv2.imread(depth_test_images +'\img ({}).png'.format(i))
+			# depth_img = cv2.imread(depth_test_images +'/img ({}).png'.format(i))
 			# stereo_depth_images.append(DepthMaptoFrame(depth_img,0,2000))
 
 		#ONLY IF ALL IMAGES ARE OF THE SAME SIZE
@@ -161,7 +162,9 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 				data.append(img_data[36867])
 
 		# Mushroom segmentation inference
-		image_result = inference_detector(mushroom_model, img).pred_instances
+		image_result = inference_detector(mushroom_model, img)#        !!!!!!!!!!!!!!
+		image_result = delete_low_confidence_predictions(image_result) #				!!!!!!!!!!!!!!
+		image_result = delete_overlapping_with_lower_confidence(image_result)	#		!!!!!!!!!!!!!!
 
 		# show the results
 		visualizer.add_datasample(
@@ -176,16 +179,8 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 
 		#Converting how inference information is saved
 		img_result = []
-		for result in image_result:
-			img_result.append([result[0]["scores"].cpu().numpy()[0],result[0]["bboxes"].cpu().numpy()[0],result[0]["labels"].cpu().numpy()[0],result[0]["masks"].cpu().numpy()[0]])
-
-		# Removing the results with a confidence level <= confidence score threshold
-		for result in img_result:
-			if result[0] <= confidence_score_threshold:
-				result[3] = []
-
-		#Preserving one result from overlapping predictions
-		img_result = delete_overlapping_with_lower_confidence(img_result)
+		for result in image_result.pred_instances:
+			img_result.append([result[0]["scores"][0],result[0]["bboxes"][0],result[0]["labels"][0],result[0]["masks"][0]])
 
 		#To store all the results from the image
 		results = []
@@ -216,7 +211,7 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 				## use the last element of the averaged substrate lengths to approximate the actual cluster length and width
 				absolute_cluster_width = round(pixel_cluster_width*substrate_real_size/averaged_length_pixels,3)
 				absolute_cluster_height = round(pixel_cluster_height*substrate_real_size/averaged_length_pixels,3)
-				results_info.append([cluster_label,absolute_cluster_height,absolute_cluster_width])
+				results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width])
 	
 		#Saving the hull results for all the clusters in the image
 		polygons.append(results)
@@ -245,6 +240,7 @@ def load_models(configs_folder,mushroom_architecture_selected,substrate_architec
 	# then pass to the model in init_detector
 	visualizer.dataset_meta = mushroom_model.dataset_meta
 	visualizer.dataset_meta["palette"][0] = (20, 220, 60)
+	visualizer.dataset_meta["palette"][1] = (220, 40, 50)
 
 
 	return mushroom_model,substrate_model,visualizer
@@ -278,7 +274,7 @@ def process_cluster(image_copy,poly,bounding,working_folder,i,j):
 	cv2.polylines(box_image, np.int32([local_poly]), True, (255, 0, 0), 5)
 
 	#Saving isolated cluster image
-	cv2.imwrite(working_folder + "\Cluster\image ({})_cluster ({}).JPG".format(i+1,j), cv2.cvtColor(box_image,cv2.COLOR_RGB2BGR))
+	cv2.imwrite(working_folder + "/Cluster/image ({})_cluster ({}).JPG".format(i+1,j), cv2.cvtColor(box_image,cv2.COLOR_RGB2BGR))
 
 	return box_image,local_poly
 
@@ -291,13 +287,13 @@ def save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_fol
 	for point in local_poly:
 		binary_mask[point[1],point[0]] = 1
 	array = [box_image[:,:,0],box_image[:,:,1],box_image[:,:,2],binary_mask]
-	np.save(working_folder + "\Arrays\RGB_image ({})_cluster ({})".format(i+1,j),array)
+	np.save(working_folder + "/Arrays/RGB_image ({})_cluster ({})".format(i+1,j),array)
 
 #Saving the various image types
 def save_image(working_folder,full_image,sizing_image,cluster_sizing_option,i):
-    cv2.imwrite(working_folder + "\Picture\images ({}).JPG".format(i+1), cv2.cvtColor(full_image,cv2.COLOR_RGB2BGR))
+    cv2.imwrite(working_folder + "/Picture/images ({}).JPG".format(i+1), cv2.cvtColor(full_image,cv2.COLOR_RGB2BGR))
     if cluster_sizing_option:
-        cv2.imwrite(working_folder + "\Sizing\images ({}).JPG".format(i+1), cv2.cvtColor(sizing_image,cv2.COLOR_RGB2BGR)) 
+        cv2.imwrite(working_folder + "/Sizing/images ({}).JPG".format(i+1), cv2.cvtColor(sizing_image,cv2.COLOR_RGB2BGR)) 
 
 #Saving the image information in numpy array format
 def save_image_array(full_image,polygon,working_folder,i):
@@ -308,18 +304,18 @@ def save_image_array(full_image,polygon,working_folder,i):
 			if not isinstance(point,int):
 				binary_mask[point[1],point[0]] = 1
 		array.append(binary_mask)
-	np.save(working_folder + "\Arrays\RGB_image ({})".format(i+1),array)
+	np.save(working_folder + "/Arrays/RGB_image ({})".format(i+1),array)
 
 #Writing information from cluster_segments to excel file
 def write_cluster_sizing(cluster_segments,working_folder):
-    with open(working_folder + '\Cluster_Sizing.csv', 'w',newline='') as csv_file:
+    with open(working_folder + '/Cluster_Sizing.csv', 'w',newline='') as csv_file:
         #Creating the csv writer
         writer = csv.writer(csv_file)
         #Writing the first row with all the headers
-        writer.writerow(['Image #','Cluster #','Cluster Area','Label','Absolute Height','Absolute Width','Cluster Height','Cluster Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])
+        writer.writerow(['Image #','Cluster #','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])
         for segment in cluster_segments:
             if segment == []:
                 writer.writerow('')
             else:
-                writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3][0],segment[3][1],segment[3][2],segment[4],segment[5],segment[6][0],segment[6][1],segment[6][2],segment[6][3],segment[6][4],segment[6][5]])
+                writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3][0],segment[3][1],segment[3][2],segment[3][3],segment[3][4],segment[4][0],segment[4][1],segment[4][2],segment[4][3],segment[4][4],segment[4][5]])
 

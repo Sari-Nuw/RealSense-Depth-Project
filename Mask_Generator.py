@@ -38,10 +38,10 @@ working_folder = "./results/" + mushroom_architecture_selected + "/"
 configs_folder = "./configs/"
 predicted_images = working_folder + 'predicted_images/'
 #Path to images
-test_set_path = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Timelapse\Experiment 3\\"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3//"
 if env_option:
     #Pathway to the environemntal files
-    data_test_set_path = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Timelapse\Experiment 3 Data\\"
+    data_test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3 Data//"
 
 # create the result folders
 os.makedirs(working_folder,exist_ok=True)
@@ -63,7 +63,7 @@ print(test_set)
 mushroom_model,substrate_model,visualizer = load_models(configs_folder,mushroom_architecture_selected,substrate_architecture_selected,use_device)
 
 #Finding the average pixel size of the substrate in the images
-averaged_length_pixels = substrate_processing(substrate_model,test_set,test_set_path)
+averaged_length_pixels, detected_length_pixels = substrate_processing(substrate_model,test_set,test_set_path,working_folder)
 
 #Iterating through the images and performing the predictions and depth estimations
 #Not depth option
@@ -106,11 +106,10 @@ for polygon in polygons:
             #Finding the bounding box of the polygon to save the image as its own unique section
             bounding = BoundingBox(poly)
             if cluster_sizing_option:
-                x_diff = bounding.maxx - bounding.minx
-                y_diff = bounding.maxy - bounding.miny
                 #Drawing the horizontal and vertical sizing lines on the image
-                segments,numbering = cluster_sizing(bounding,x_diff,y_diff,poly,sizing_image,numbering)
-                cluster_segments.append([i+1,j,Polygon(poly).area,polygons_info[i][j],x_diff,y_diff,segments])
+                segments,numbering = cluster_sizing(bounding,polygons_info[i][j][2],polygons_info[i][j][1],poly,sizing_image,numbering)
+                absolute_cluster_area = pixel_absolute_area(Polygon(poly).area,averaged_length_pixels,50)
+                cluster_segments.append([i+1,j,absolute_cluster_area,polygons_info[i][j],segments])
             #Isolate and save the cluster from the original image
             box_image,local_poly = process_cluster(image_copy,poly,bounding,working_folder,i,j)
             #Saving the image with outlined clusters

@@ -22,7 +22,7 @@ if cluster_sizing_option:
     tracking_option = True
 
 #Save the prediction information in the form of numpy arrays
-array_option = True
+array_option = False
 if array_option:
     cluster_sizing_option = True
     tracking_option = True
@@ -37,10 +37,10 @@ working_folder = "./results/" + mushroom_architecture_selected + "/"
 configs_folder = "./configs/"
 predicted_images = working_folder + 'predicted_images/'
 #Path to images
-test_set_path = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Timelapse\Experiment 3\\"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3//"
 if env_option:
     #Pathway to the environemntal files
-    data_test_set_path = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Timelapse\Experiment 3 Data\\"
+    data_test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3 Data//"
 
 # create the result folders
 os.makedirs(working_folder,exist_ok=True)
@@ -61,7 +61,7 @@ print(test_set)
 mushroom_model,substrate_model,visualizer,pipe = load_models_depth(configs_folder,mushroom_architecture_selected,substrate_architecture_selected,use_device)
 
 #Finding the average pixel size of the substrate in the images
-averaged_length_pixels = substrate_processing(substrate_model,test_set,test_set_path)
+averaged_length_pixels, detected_legnth_pixels = substrate_processing(substrate_model,test_set,test_set_path,working_folder)
 
 #Iterating through the images and performing the predictions and depth estimations
 images,image_files,data,polygons,polygons_info,polygons_depth_info,stereo_depth_images,estimated_depth_images,color_estimated_depth_images,img_size = image_processing_depth(0.5,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,pipe,stereo_option,env_option)
@@ -104,11 +104,10 @@ for polygon in polygons:
             #Finding the bounding box of the polygon to save the image as its own unique section
             bounding = BoundingBox(poly)
             if cluster_sizing_option:
-                x_diff = bounding.maxx - bounding.minx
-                y_diff = bounding.maxy - bounding.miny
                 #Drawing the horizontal and vertical sizing lines on the image
-                segments,numbering = cluster_sizing(bounding,x_diff,y_diff,poly,sizing_image,numbering)
-                cluster_segments.append([i+1,j,Polygon(poly).area,polygons_info[i][j],x_diff,y_diff,segments,polygons_depth_info[i][j]])
+                segments,numbering = cluster_sizing(bounding,polygons_info[i][j][2],polygons_info[i][j][1],poly,sizing_image,numbering)
+                absolute_cluster_area = pixel_absolute_area(Polygon(poly).area,averaged_length_pixels,50)
+                cluster_segments.append([i+1,j,absolute_cluster_area,polygons_info[i][j],segments,polygons_depth_info[i][j]])
             #Isolate and save the cluster from the original image
             box_image,depth_box_image,local_poly = process_cluster_depth(image_copy,depth_img_copy,poly,bounding,working_folder,i,j)
             #Saving the image with outlined clusters
