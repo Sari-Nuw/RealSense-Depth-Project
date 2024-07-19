@@ -388,7 +388,7 @@ def write_cluster_sizing_depth(cluster_segments,working_folder):
         #Creating the csv writer
         writer = csv.writer(csv_file)
         #Writing the first row with all the headers
-        writer.writerow(['Image #','Cluster #','Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom','Depth Mean','Depth Std Dev','Depth Max','Depth Min'])
+        writer.writerow(['Image #','Cluster #','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom','Depth Mean','Depth Std Dev','Depth Max','Depth Min'])
         for segment in cluster_segments:
             if segment == []:
                 writer.writerow('')
