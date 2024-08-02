@@ -40,6 +40,35 @@ def cluster_sort(polygons,polygons_info):
 	for i in range(len(polygons)):
 		while len(polygons[i]) < len(polygons[-1]):
 			polygons[i].append([0])
+			polygons_info[i].append([0])
+
+	return polygons,polygons_info
+
+#Remove indexes that dont appear consistently
+def consistency_filter(polygons,polygons_info,percent=0.9):
+	to_remove = []
+	percentage = int(percent*len(polygons[-1]))
+	print('percentage')
+	print(percentage)
+	for i in range(len(polygons[-1])):
+		#Get all the ith elements 
+		cluster_check = [cluster[i] for cluster in polygons]
+		#Checking how many nan answers for the cluster
+		j = 0
+		for cluster in cluster_check:
+			if len(cluster) <= 1:
+				j += 1
+		print('j')
+		print(j)
+		#If more nan than defined percentage remove from the lists
+		if j > percentage:
+			to_remove.append(i)
+
+	#Deleting indexes that dont appear consistently 
+	for i in range(len(polygons)):
+		for index in reversed(to_remove):
+			del polygons[i][index]
+			del polygons_info[i][index]
 
 	return polygons,polygons_info
 

@@ -6,13 +6,13 @@ from Mask_Generator_Utils import *
 
 #Different utility options#
 #Growth tracking option
-tracking_option = False
+tracking_option = True
 
 #Using stereo depth data if available 
 stereo_option = False
 
 #Environmental option
-env_option = True
+env_option = False
 if env_option:
     #Tracking needs to be on for environmental data
     tracking_option = True 
@@ -23,7 +23,7 @@ if cluster_sizing_option:
     tracking_option = True
 
 #Save the prediction information in the form of numpy arrays
-array_option = True
+array_option = False
 if array_option:
     cluster_sizing_option = True
     tracking_option = True
@@ -38,7 +38,7 @@ working_folder = "./results/" + mushroom_architecture_selected + "/"
 configs_folder = "./configs/"
 predicted_images = working_folder + 'predicted_images/'
 #Path to images
-test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3//"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Exp1//"
 if env_option:
     #Pathway to the environemntal files
     data_test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3 Data//"
@@ -55,7 +55,7 @@ use_device = check_cuda()
 #Images MUST be named 'img (1,2,3..).JPG'
 test_set = get_test_set(test_set_path)
 #To control test set size
-#test_set = test_set[10:15]
+#test_set = test_set[0:11]
 print(test_set)
 
 #Loading models prediction and depth estimation models
@@ -72,6 +72,9 @@ images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size = im
 #Sorting clusters for tracking
 if tracking_option:
     polygons,polygons_info = cluster_sort(polygons,polygons_info)
+
+#Filter out clusters that don't appear frequently
+polygons,polygons_info = consistency_filter(polygons,polygons_info)
 
 if annotation_option:
     annotations = get_annotations('hungary_annotations.txt')
@@ -126,7 +129,7 @@ for polygon in polygons:
             #Saving the image information for an individual cluster in numpy array format
             if array_option:
                 save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_folder,i,j)
-            cluster_track[i].append(j)
+            cluster_track[i].append(j)           
         j += 1
     #Saving image in various forms
     save_image(working_folder,full_image,sizing_image,cluster_sizing_option,i)

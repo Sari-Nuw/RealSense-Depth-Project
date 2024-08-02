@@ -11,7 +11,7 @@ tracking_option = False
 stereo_option = False
 
 #Environmental option
-env_option = True
+env_option = False
 if env_option:
     #Tracking needs to be on for environmental data
     tracking_option = True 
@@ -37,7 +37,7 @@ working_folder = "./results/" + mushroom_architecture_selected + "/"
 configs_folder = "./configs/"
 predicted_images = working_folder + 'predicted_images/'
 #Path to images
-test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3//"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Exp1//"
 if env_option:
     #Pathway to the environemntal files
     data_test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3 Data//"
@@ -54,7 +54,7 @@ use_device = check_cuda()
 #Images MUST be named 'img (1,2,3..).JPG'
 test_set = get_test_set(test_set_path)
 #To control test set size
-#test_set = test_set[10:15]
+test_set = test_set[0:12]
 print(test_set)
 
 #Loading models prediction and depth estimation models
@@ -69,6 +69,9 @@ images,image_files,data,polygons,polygons_info,polygons_depth_info,stereo_depth_
 #Sorting clusters for tracking
 if tracking_option:
     polygons,polygons_info,polygons_depth_info = cluster_sort_depth(polygons,polygons_info,polygons_depth_info)
+
+#Filter out clusters that don't appear frequently
+polygons,polygons_info,polygons_depth_info = consistency_filter(polygons,polygons_info,polygons_depth_info)
 
 if annotation_option:
     annotations = get_annotations('hungary_annotations.txt')

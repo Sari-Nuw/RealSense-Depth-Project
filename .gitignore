@@ -169,6 +169,11 @@ Results/
 mmdetection/
 configs/
 AllMushrooms/
+set1/
+set2/
+set3/
+set4/
+set5/
 #Ignoring client_secrets file with sensitive information
 client_secrets.json
 #Ignoring large model files (YOLO and SAM)

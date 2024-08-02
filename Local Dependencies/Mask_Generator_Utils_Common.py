@@ -278,39 +278,40 @@ def get_test_set(test_set_path):
 #Clipping sizing lines down to the proper size based on cluster
 def line_clip(line,poly,image,numbering):
 
-    #Find where the line intersects with thw polygon
-    line_intersect = Polygon(poly).buffer(0).intersection(line)
-    clipped = []
-    #Check if theres multiple intersection segments
-    if line_intersect.geom_type == 'GeometryCollection':
-        for k in range(len(line_intersect.geoms)):
-            #Only considering lines (points are removed)
-            if line_intersect.geoms[k].geom_type == 'LineString':
-                clipped.append(line_intersect.geoms[k])
-        clipped = get_coordinates(clipped).astype(int)
-    #Only one intersection segment
-    else:
-        clipped = get_coordinates(line_intersect).astype(int)
-    #Draw the line segments on the image
-    k = 0
-    segment_lengths = []
-    while k < len(clipped):
-        cv2.line(image,clipped[k],clipped[k+1],(255, 0, 0),10)
-        clipped_length = math.dist(clipped[k],clipped[k+1])
-        if len(clipped) > 2 :
-            #Removing small lines
-            if clipped_length > 20:
-                #cv2.putText(image, str(clipped_length), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
-                cv2.putText(image, str(numbering), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
-                segment_lengths.append(clipped_length)
-                numbering += 1
-        else:
-            #cv2.putText(image, str(clipped_length), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
-            cv2.putText(image, str(numbering), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
-            segment_lengths.append(clipped_length)
-            numbering += 1
-        k += 2
-    return segment_lengths,numbering
+	#Find where the line intersects with thw polygon
+	line_intersect = Polygon(poly).buffer(0).intersection(line)
+	clipped = []
+	#Check if theres multiple intersection segments
+	if line_intersect.geom_type == 'GeometryCollection':
+		for k in range(len(line_intersect.geoms)):
+			#Only considering lines (points are removed)
+			if line_intersect.geoms[k].geom_type == 'LineString':
+				clipped.append(line_intersect.geoms[k])
+		clipped = get_coordinates(clipped).astype(int)
+	#Only one intersection segment
+	else:
+		clipped = get_coordinates(line_intersect).astype(int)
+
+	#Draw the line segments on the image
+	k = 0
+	segment_lengths = []
+	while k < len(clipped) and len(clipped) > 1:
+		cv2.line(image,clipped[k],clipped[k+1],(255, 0, 0),10)
+		clipped_length = math.dist(clipped[k],clipped[k+1])
+		if len(clipped) > 2 :
+			#Removing small lines
+			if clipped_length > 20:
+				#cv2.putText(image, str(clipped_length), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
+				cv2.putText(image, str(numbering), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
+				segment_lengths.append(clipped_length)
+				numbering += 1
+		else:
+			#cv2.putText(image, str(clipped_length), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
+			cv2.putText(image, str(numbering), (clipped[k][0],clipped[k][1]), cv2.FONT_HERSHEY_COMPLEX, 3, (0,255,0), 8, cv2.LINE_AA)
+			segment_lengths.append(clipped_length)
+			numbering += 1
+		k += 2
+	return segment_lengths,numbering
 
 #Gathering the information from individual clusters across images to be able to track their growth
 def line_setup(polygons,img_size):
