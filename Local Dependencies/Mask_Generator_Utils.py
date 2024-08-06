@@ -47,7 +47,7 @@ def cluster_sort(polygons,polygons_info):
 #Remove indexes that dont appear consistently
 def consistency_filter(polygons,polygons_info,percent=0.9):
 	to_remove = []
-	percentage = int(percent*len(polygons[-1]))
+	percentage = int(percent*len(polygons))
 	print('percentage')
 	print(percentage)
 	for i in range(len(polygons[-1])):

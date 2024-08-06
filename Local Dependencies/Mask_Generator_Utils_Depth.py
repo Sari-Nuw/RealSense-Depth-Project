@@ -49,9 +49,9 @@ def cluster_sort_depth(polygons,polygons_info,polygons_depth_info):
 	return polygons,polygons_info,polygons_depth_info
 
 #Remove indexes that dont appear consistently
-def consistency_filter(polygons,polygons_info,polygons_depth_info,percentage = 0.9):
+def consistency_filter(polygons,polygons_info,polygons_depth_info,percent = 0.9):
 	to_remove = []
-	percentage = int(percentage*len(polygons[-1]))
+	percentage = int(percent*len(polygons))
 	for i in range(len(polygons[-1])):
 		#Get all the ith elements 
 		cluster_check = [cluster[i] for cluster in polygons]

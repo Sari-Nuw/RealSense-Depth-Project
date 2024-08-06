@@ -54,7 +54,7 @@ use_device = check_cuda()
 #Images MUST be named 'img (1,2,3..).JPG'
 test_set = get_test_set(test_set_path)
 #To control test set size
-test_set = test_set[0:12]
+#test_set = test_set[0:12]
 print(test_set)
 
 #Loading models prediction and depth estimation models
