@@ -31,6 +31,9 @@ if array_option:
 #Compare the predicted masks with the hand-annotated masks
 annotation_option = False
 
+#Measure the average substate size dynamically across the images
+dynamic_substrate_option = True
+
 # Set the paths for differnt folders
 mushroom_architecture_selected = "mushroom_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
 substrate_architecture_selected = "substrate_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
@@ -55,7 +58,7 @@ use_device = check_cuda()
 #Images MUST be named 'img (1,2,3..).JPG'
 test_set = get_test_set(test_set_path)
 #To control test set size
-#test_set = test_set[0:11]
+test_set = test_set[90:110]
 print(test_set)
 
 #Loading models prediction and depth estimation models
@@ -63,11 +66,10 @@ print(test_set)
 mushroom_model,substrate_model,visualizer = load_models(configs_folder,mushroom_architecture_selected,substrate_architecture_selected,use_device)
 
 #Finding the average pixel size of the substrate in the images
-averaged_length_pixels, detected_length_pixels = substrate_processing(substrate_model,test_set,test_set_path,working_folder)
+averaged_length_pixels = substrate_processing(substrate_model,test_set,test_set_path,working_folder)
 
 #Iterating through the images and performing the predictions and depth estimations
-#Not depth option
-images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size = image_processing(0.5,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,stereo_option,env_option)
+images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size = image_processing(0.5,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,stereo_option,env_option,dynamic_substrate_option)
 
 #Sorting clusters for tracking
 if tracking_option:
@@ -111,7 +113,10 @@ for polygon in polygons:
             if cluster_sizing_option:
                 #Drawing the horizontal and vertical sizing lines on the image
                 segments,numbering = cluster_sizing(bounding,polygons_info[i][j][2],polygons_info[i][j][1],poly,sizing_image,numbering)
-                absolute_cluster_area = pixel_absolute_area(Polygon(poly).area,averaged_length_pixels,50)
+                if dynamic_substrate_option:
+                    absolute_cluster_area = pixel_absolute_area(Polygon(poly).area,averaged_length_pixels[i],50)
+                else:
+                    absolute_cluster_area = pixel_absolute_area(Polygon(poly).area,averaged_length_pixels[-1],50)
                 cluster_segments.append([i+1,j,absolute_cluster_area,polygons_info[i][j],segments])
             #Isolate and save the cluster from the original image
             box_image,local_poly = process_cluster(image_copy,poly,bounding,working_folder,i,j)

@@ -11,6 +11,15 @@ from mmdet.registry import VISUALIZERS
 from Environmental_Tracking import *
 import csv
 from UliEngineering.Math.Coordinates import BoundingBox
+import pandas as pd
+from PIL import Image, ImageStat
+
+#Adjust image brightness for processing
+def brightness(im_file):       
+    im = Image.open(im_file)        
+    stat = ImageStat.Stat(im)        
+    r,g,b = stat.mean        
+    return math.sqrt(0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2))
 
 #Sorting clusters for tracking
 def cluster_sort(polygons,polygons_info):
@@ -145,7 +154,7 @@ def coordinate_sort(polygons,basis,polygons_info,baseline):
     return polygons_temp,info_temp
 
 #Iterating through the images and performing the predictions and depth estimations
-def image_processing(confidence_score_threshold,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,stereo_option,env_option):
+def image_processing(confidence_score_threshold,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,stereo_option,env_option,dynamic_substrate_option):
 
 	images = []
 	image_files = []
@@ -153,6 +162,7 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 	polygons = []
 	polygons_info = []
 	stereo_depth_images = []
+	list_of_brightness = []
 
 	#From the farm substrate (50 cm)
 	substrate_real_size = 50
@@ -160,7 +170,15 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 	#Image size in pixels
 	img_size = 0
 
+	i = 0
 	for test_img in test_set:
+
+		# check and adjust brightness
+		list_of_brightness.append(brightness(test_set_path + test_img))
+		if abs(list_of_brightness[-1] - np.mean(list_of_brightness))>3*np.std(list_of_brightness):
+			print("Image with outlier brightness (lights on) detected and skipped: ", test_img)
+			list_of_brightness.pop()
+			continue
 
 		# load the image and color correct
 		img = mmcv.imread(test_set_path + test_img)
@@ -191,9 +209,9 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 				data.append(img_data[36867])
 
 		# Mushroom segmentation inference
-		image_result = inference_detector(mushroom_model, img)#        !!!!!!!!!!!!!!
-		image_result = delete_low_confidence_predictions(image_result) #				!!!!!!!!!!!!!!
-		image_result = delete_overlapping_with_lower_confidence(image_result)	#		!!!!!!!!!!!!!!
+		image_result = inference_detector(mushroom_model, img)
+		image_result = delete_low_confidence_predictions(image_result) 
+		image_result = delete_overlapping_with_lower_confidence(image_result)
 
 		# show the results
 		visualizer.add_datasample(
@@ -238,13 +256,20 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 				#Getting cluster label
 				cluster_label = result[2]
 				## use the last element of the averaged substrate lengths to approximate the actual cluster length and width
-				absolute_cluster_width = round(pixel_cluster_width*substrate_real_size/averaged_length_pixels,3)
-				absolute_cluster_height = round(pixel_cluster_height*substrate_real_size/averaged_length_pixels,3)
-				results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width])
+				if dynamic_substrate_option:
+					absolute_cluster_width = round(pixel_cluster_width*substrate_real_size/averaged_length_pixels[i],3)
+					absolute_cluster_height = round(pixel_cluster_height*substrate_real_size/averaged_length_pixels[i],3)
+					results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width])
+				else:
+					absolute_cluster_width = round(pixel_cluster_width*substrate_real_size/averaged_length_pixels[-1],3)
+					absolute_cluster_height = round(pixel_cluster_height*substrate_real_size/averaged_length_pixels[-1],3)
+					results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width])
 	
 		#Saving the hull results for all the clusters in the image
 		polygons.append(results)
 		polygons_info.append(results_info)
+
+		i += 1
 
 	return 	images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size
 
@@ -303,6 +328,7 @@ def process_cluster(image_copy,poly,bounding,working_folder,i,j):
 	cv2.polylines(box_image, np.int32([local_poly]), True, (255, 0, 0), 5)
 
 	#Saving isolated cluster image
+	os.makedirs(working_folder + "/Cluster/",exist_ok=True)
 	cv2.imwrite(working_folder + "/Cluster/image ({})_cluster ({}).JPG".format(i+1,j), cv2.cvtColor(box_image,cv2.COLOR_RGB2BGR))
 
 	return box_image,local_poly
@@ -316,13 +342,16 @@ def save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_fol
 	for point in local_poly:
 		binary_mask[point[1],point[0]] = 1
 	array = [box_image[:,:,0],box_image[:,:,1],box_image[:,:,2],binary_mask]
+	os.makedirs(working_folder + "/Arrays/",exist_ok=True)
 	np.save(working_folder + "/Arrays/RGB_image ({})_cluster ({})".format(i+1,j),array)
 
 #Saving the various image types
 def save_image(working_folder,full_image,sizing_image,cluster_sizing_option,i):
-    cv2.imwrite(working_folder + "/Picture/images ({}).JPG".format(i+1), cv2.cvtColor(full_image,cv2.COLOR_RGB2BGR))
-    if cluster_sizing_option:
-        cv2.imwrite(working_folder + "/Sizing/images ({}).JPG".format(i+1), cv2.cvtColor(sizing_image,cv2.COLOR_RGB2BGR)) 
+	os.makedirs(working_folder + "/Picture/",exist_ok=True)
+	cv2.imwrite(working_folder + "/Picture/images ({}).JPG".format(i+1), cv2.cvtColor(full_image,cv2.COLOR_RGB2BGR))
+	if cluster_sizing_option:
+		os.makedirs(working_folder + "/Sizing/",exist_ok=True)
+		cv2.imwrite(working_folder + "/Sizing/images ({}).JPG".format(i+1), cv2.cvtColor(sizing_image,cv2.COLOR_RGB2BGR)) 
 
 #Saving the image information in numpy array format
 def save_image_array(full_image,polygon,working_folder,i):
@@ -333,18 +362,22 @@ def save_image_array(full_image,polygon,working_folder,i):
 			if not isinstance(point,int):
 				binary_mask[point[1],point[0]] = 1
 		array.append(binary_mask)
+	os.makedirs(working_folder + "/Arrays/",exist_ok=True)
 	np.save(working_folder + "/Arrays/RGB_image ({})".format(i+1),array)
 
 #Writing information from cluster_segments to excel file
 def write_cluster_sizing(cluster_segments,working_folder):
-    with open(working_folder + '/Cluster_Sizing.csv', 'w',newline='') as csv_file:
-        #Creating the csv writer
-        writer = csv.writer(csv_file)
-        #Writing the first row with all the headers
-        writer.writerow(['Image #','Cluster #','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])
-        for segment in cluster_segments:
-            if segment == []:
-                writer.writerow('')
-            else:
-                writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3][0],segment[3][1],segment[3][2],segment[3][3],segment[3][4],segment[4][0],segment[4][1],segment[4][2],segment[4][3],segment[4][4],segment[4][5]])
+	with open(working_folder + '/Cluster_Sizing.csv', 'w',newline='') as csv_file:
+		#Creating the csv writer
+		writer = csv.writer(csv_file)
+		#Writing the first row with all the headers
+		writer.writerow(['Image #','Cluster #','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])
+		for segment in cluster_segments:
+			if segment == []:
+				writer.writerow('')
+			else:
+				writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3][0],segment[3][1],segment[3][2],segment[3][3],segment[3][4],segment[4][0],segment[4][1],segment[4][2],segment[4][3],segment[4][4],segment[4][5]])
+
+	df = pd.read_csv(working_folder + '/Cluster_Sizing.csv')
+	df.to_csv(working_folder + '/Cluster_Sizing_excel_format.csv', sep=";", decimal=",")
 

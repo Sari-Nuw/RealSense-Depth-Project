@@ -421,6 +421,7 @@ def plot_growth(polygons,x_axis,lines):
 def substrate_processing(substrate_model,test_set,test_set_path,working_folder):
 
 	detected_length_pixels = []
+	averaged_length_pixels = []
 
 	i = 0
 	for test_img in test_set:
@@ -440,14 +441,15 @@ def substrate_processing(substrate_model,test_set,test_set_path,working_folder):
 			cv2.rectangle(substrate_img,(int(sub_result[0]),int(sub_result[1])),(int(sub_result[2]),int(sub_result[3])),(0,0,255),5)
 
 		#Save images
+		os.makedirs(working_folder + "/Substrate/",exist_ok=True)
 		cv2.imwrite(working_folder + "/Substrate/images ({}).JPG".format(i+1), cv2.cvtColor(substrate_img,cv2.COLOR_RGB2BGR))
 		i += 1
 				
 		# collect substrate length data
 		detected_length_pixels.append(substrate_result[0]["bboxes"].cpu().numpy()[0][2] - substrate_result[0]["bboxes"].cpu().numpy()[0][0])
 
-	# calculate the substrate length average
-	averaged_length_pixels = sum(detected_length_pixels)/len(detected_length_pixels)
+		# calculate the substrate length average
+		averaged_length_pixels.append(sum(detected_length_pixels)/len(detected_length_pixels))
 
-	return averaged_length_pixels, detected_length_pixels
+	return averaged_length_pixels
 
