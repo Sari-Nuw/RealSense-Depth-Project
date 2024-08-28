@@ -64,7 +64,7 @@ print(test_set)
 mushroom_model,substrate_model,visualizer,pipe = load_models_depth(configs_folder,mushroom_architecture_selected,substrate_architecture_selected,use_device)
 
 #Finding the average pixel size of the substrate in the images
-averaged_length_pixels = substrate_processing(substrate_model,test_set,test_set_path,working_folder)
+averaged_length_pixels,detected_length_pixels = substrate_processing(substrate_model,test_set,test_set_path,working_folder)
 
 #Iterating through the images and performing the predictions and depth estimations
 images,image_files,data,polygons,polygons_info,polygons_depth_info,stereo_depth_images,estimated_depth_images,color_estimated_depth_images,img_size = image_processing_depth(0.5,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,pipe,stereo_option,env_option,dynamic_substrate_option)

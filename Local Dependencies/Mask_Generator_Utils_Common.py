@@ -451,5 +451,5 @@ def substrate_processing(substrate_model,test_set,test_set_path,working_folder):
 		# calculate the substrate length average
 		averaged_length_pixels.append(sum(detected_length_pixels)/len(detected_length_pixels))
 
-	return averaged_length_pixels
+	return averaged_length_pixels,detected_length_pixels
 
