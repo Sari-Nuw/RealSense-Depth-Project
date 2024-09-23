@@ -23,20 +23,27 @@ def annotation_iou(annotations,poly,full_image,centre):
 #Calculating iou for bounding boxes
 def box_iou(box_1,box_2):
 
-    intersection_width = min(box_1[0],box_2[0]) - max(box_1[2],box_2[2])
-    intersection_height = min(box_1[1],box_2[1]) - max(box_1[3],box_2[3])
+	#Getting intersection width and height
+	intersection_width = min(box_1[2],box_2[2]) - max(box_1[0],box_2[0]) 
+	intersection_height = min(box_1[3],box_2[3]) - max(box_1[1],box_2[1]) 
 
-    if intersection_height <= 0 or intersection_width <= 0:
-        return 0
-    
-    intersection_area = intersection_width*intersection_height
-    
-    box_1_area = (box_1[2]-box_1[0]) * (box_1[3]-box_1[1])
-    box_2_area = (box_2[2]-box_2[0]) * (box_2[3]-box_2[1])
+	#No intersection
+	if intersection_height <= 0 or intersection_width <= 0:
+		return 0
 
-    union_area = box_1_area + box_2_area - intersection_area
+	#Caclulating intersection area and area of each box
+	intersection_area = intersection_width*intersection_height
 
-    return intersection_area/union_area
+	box_1_area = (box_1[2]-box_1[0]) * (box_1[3]-box_1[1])
+	box_2_area = (box_2[2]-box_2[0]) * (box_2[3]-box_2[1])
+
+	#One box completely within another box
+	if box_1_area == intersection_area or box_2_area == intersection_area:
+		return 1
+
+	union_area = box_1_area + box_2_area - intersection_area
+
+	return intersection_area/union_area
 
 #Checking if CUDA is available on the device running the program
 def check_cuda():
@@ -82,11 +89,27 @@ def cluster_sizing(bounding,x_diff,y_diff,poly,image,numbering):
 
 #Calculating intersection over union for coordiante list 
 def coordinate_iou(poly,base):
-    poly1 = Polygon(poly).buffer(0)
-    poly2 = Polygon(base).buffer(0)
-    intersect = poly1.intersection(poly2).area
-    union = poly1.union(poly2).area
-    return intersect / union
+
+	poly1 = Polygon(poly).buffer(0)
+	poly2 = Polygon(base).buffer(0)
+
+	#Getting intersection of both polygons
+	intersect = poly1.intersection(poly2).area
+	if intersect == 0:
+		return 0
+	
+	#Getting union and intersection over union
+	union = poly1.union(poly2).area
+	iou = intersect / union
+
+	#Check for full overlap and small cluster (harvested cluster) based on overlap margin
+	margin = 0.03
+	if (poly1.area >= (1-margin)*intersect and poly1.area <= (1+margin)*intersect and iou <= 0.3) or (poly2.area >= (1-margin)*intersect and poly2.area <= (1+margin)*intersect and iou <= 0.3):
+	#if (poly1.area == intersect and iou <= 0.3) or (poly2.area == intersect and iou <= 0.3):
+		print(poly1.area, poly2.area, intersect)
+		return 1
+	else:
+		return iou
 
 ## dict to MMDetection InstanceData class
 def dict_to_instance_data(instance_dict):#			!!!!!!!!!!!!!!
@@ -106,7 +129,7 @@ def dict_to_det_data_sample(data_dict):#			!!!!!!!!!!!!!!
             setattr(det_data_sample, key, value)
     return det_data_sample
 
-def delete_low_confidence_predictions(result,confidence_score_threshold=0.5):#			!!!!!!!!!!!!!!
+def delete_low_confidence_predictions(result,confidence_score_threshold=0.6):#			!!!!!!!!!!!!!!
     result = result.cpu().numpy().to_dict()
     low_conf_indices = []
     ## find which predictions are of low classification/confidence score and keep their index for deletion
@@ -123,7 +146,7 @@ def delete_low_confidence_predictions(result,confidence_score_threshold=0.5):#		
     return dict_to_det_data_sample(result)
 
 #Check for overlapping predictions and remove the result with lower confidence
-def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.8):#			!!!!!!!!!!!!!!
+def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.7):#			!!!!!!!!!!!!!!
     result = result.cpu().numpy().to_dict()
     to_delete = []
     ## iterate through all existing pairs of predictions
@@ -149,36 +172,6 @@ def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.8):#			!!!
     result["pred_instances"]["labels"] = np.delete(result["pred_instances"]["labels"],to_delete, axis=0)
 
     return dict_to_det_data_sample(result)
-
-# #Check for overlapping predictions and remove the result with lower confidence
-# def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.8):
-
-#     to_delete = []
-
-#     ## iterate through all existing pairs of predictions
-#     for idx in range(len(result)):
-#         if idx+1 < len(result):
-#             for idy in range(idx+1,len(result)):
-#                 ## create the pair of bounding boxes to be examined
-#                 box1 = result[idx][1]
-#                 box2 = result[idy][1]
-#                 ## calculate iou of bounding boxes pair
-#                 iou = box_iou(box1, box2)
-#                 ## if iou is above a defined threshold the two prediction are referring to the same instance,
-#                 ## so we find the one with the lower classification/confidence score and keep its index to be deleted
-#                 #print('check threshold')
-#                 if iou>iou_threshold:
-#                     #print('removed')
-#                     if result[idx][0]>result[idy][0]:
-#                         to_delete.append(idy)
-#                     else:
-#                         to_delete.append(idx)
-    
-#     ## delete from all components of the result variable the overlapping instances with classification/confidence score
-#     for id in to_delete:
-#         result[id][3] = []
-
-#     return result
 
 #Getting annotations from text file (JSON Coco format)
 def get_annotations(text_file):
@@ -314,20 +307,22 @@ def line_clip(line,poly,image,numbering):
 	return segment_lengths,numbering
 
 #Gathering the information from individual clusters across images to be able to track their growth
-def line_setup(polygons,img_size):
+def line_setup(polygons,polygons_info,img_size):
 
 	#Sizing segmented areas from the images
 	mask_sizes = [[] for _ in range(len(polygons))]
 	i = 0
 	for polygon in polygons:
+		j = 0
 		for poly in polygon:
 			#Getting area of each polygon
-			if len(poly) > 1:
+			if len(poly) > 1 and len(polygons_info[i][j][6]) == 1:
 				p = Polygon(poly)
 				segment = round((p.area/img_size*100),4)
 				mask_sizes[i].append(segment)
 			else:
 				mask_sizes[i].append(0)
+			j += 1
 		i += 1
 
 	#To store all the different lines based on total number of 'box points' found
@@ -450,6 +445,8 @@ def substrate_processing(substrate_model,test_set,test_set_path,working_folder):
 
 		# calculate the substrate length average
 		averaged_length_pixels.append(sum(detected_length_pixels)/len(detected_length_pixels))
+
+		print('Substrate Model Image {}'.format(i))
 
 	return averaged_length_pixels,detected_length_pixels
 

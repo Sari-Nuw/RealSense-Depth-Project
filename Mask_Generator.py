@@ -6,7 +6,7 @@ from Mask_Generator_Utils import *
 
 #Different utility options#
 #Growth tracking option
-tracking_option = True
+tracking_option = False
 
 #Using stereo depth data if available 
 stereo_option = False
@@ -41,7 +41,7 @@ working_folder = "./results/" + mushroom_architecture_selected + "/"
 configs_folder = "./configs/"
 predicted_images = working_folder + 'predicted_images/'
 #Path to images
-test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Exp1//"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Full3//"
 if env_option:
     #Pathway to the environemntal files
     data_test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 3 Data//"
@@ -58,7 +58,8 @@ use_device = check_cuda()
 #Images MUST be named 'img (1,2,3..).JPG'
 test_set = get_test_set(test_set_path)
 #To control test set size
-test_set = test_set[90:110]
+#test_set = test_set[45:160]
+#test_set = test_set[145:185]
 print(test_set)
 
 #Loading models prediction and depth estimation models
@@ -74,9 +75,9 @@ images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size = im
 #Sorting clusters for tracking
 if tracking_option:
     polygons,polygons_info = cluster_sort(polygons,polygons_info)
-
-#Filter out clusters that don't appear frequently
-polygons,polygons_info = consistency_filter(polygons,polygons_info)
+    
+    #Filter out clusters that don't appear frequently
+    polygons,polygons_info = consistency_filter(polygons,polygons_info)
 
 if annotation_option:
     annotations = get_annotations('hungary_annotations.txt')
@@ -104,7 +105,7 @@ for polygon in polygons:
     j = 0
     for poly in polygon:
         #Draw lines
-        if len(poly) > 1:
+        if len(poly) > 1 and len(polygons_info[i][j][6]) == 1:
             poly.reshape(-1,1,2)
             #Getting the centre point of the polygons
             centre = Polygon(poly).centroid
@@ -148,7 +149,7 @@ for polygon in polygons:
 
 #Gathering the information from individual clusters across images to be able to track their growth
 if tracking_option:
-    lines,x_axis = line_setup(polygons,img_size)
+    lines,x_axis = line_setup(polygons,polygons_info,img_size)
 
 #Extracting the environmental variables from the csv files and combining with image data
 if env_option:

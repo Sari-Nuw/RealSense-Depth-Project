@@ -27,6 +27,21 @@ def cluster_sort(polygons,polygons_info):
 	#Establishing baseline for sorting
 	baseline = []
 
+	# for i in range (len(polygons)):
+	# 	for j in range(len(polygons[i])):
+	# 		centre = Polygon(polygons[i][j]).centroid
+	# 		if j != 5:
+	# 			cv2.polylines(images[i], np.int32([polygons[i][j]]), True, (255, 0, 0), 5)
+	# 			if j > 5:
+	# 				cv2.putText(images[i], 'Pred{}'.format(j-1), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
+	# 			else:
+	# 				cv2.putText(images[i], 'Pred{}'.format(j), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
+	# 		os.makedirs(working_folder + "/Unsorted/",exist_ok=True)
+	# 		cv2.imwrite(working_folder + "/Unsorted/image ({}).JPG".format(i+1), cv2.cvtColor(images[i],cv2.COLOR_RGB2BGR))
+	# 		print(i,j)
+
+	#Sorting the bounding boxes for consistency 
+	#POLYGON SORTED VERSION
 	i = 0
 	while baseline == []:
 		if polygons[i] != []:
@@ -34,9 +49,8 @@ def cluster_sort(polygons,polygons_info):
 			start = i
 		i += 1
 
-    #Sorting the bounding boxes for consistency 
 	for i in range(start,len(polygons)-1):
-		polygons[i+1],polygons_info[i+1] = coordinate_sort(polygons[i+1],polygons[i],polygons_info[i+1],baseline)
+		polygons[i+1],polygons_info[i+1] = polygon_sort(polygons[i+1],polygons[i],polygons_info[i+1],baseline)
         #Updating baseline
 		for j in range(len(polygons[i+1])):
 			if len(polygons[i+1][j]) > 1:
@@ -45,6 +59,26 @@ def cluster_sort(polygons,polygons_info):
 				else:
 					baseline.append(polygons[i+1][j])
 
+	#BOUNDING BOX SORTED VERSION
+
+	# i = 0
+	# while baseline == []:
+	# 	if polygons_info[i] != []:
+	# 		baseline = polygons_info[i].copy()
+	# 		start = i
+	# 	i += 1
+
+	# for i in range(start,len(polygons_info)-1):
+	# 	polygons[i+1],polygons_info[i+1] = bbox_sort(polygons_info[i+1],polygons_info[i],polygons[i+1],baseline)
+    #     #Updating baseline
+	# 	for j in range(len(polygons_info[i+1])):
+	# 		if len(polygons_info[i+1][j]) > 1:
+	# 			if j < (len(baseline)):
+	# 				baseline[j] = polygons_info[i+1][j]
+	# 			else:
+	# 				baseline.append(polygons_info[i+1][j])
+
+	#CHECK THE CODE BELOW. WHAT IS ITS EXACT PURPOSE???
     #Adding null points to make the list equal sizes
 	for i in range(len(polygons)):
 		while len(polygons[i]) < len(polygons[-1]):
@@ -57,8 +91,6 @@ def cluster_sort(polygons,polygons_info):
 def consistency_filter(polygons,polygons_info,percent=0.9):
 	to_remove = []
 	percentage = int(percent*len(polygons))
-	print('percentage')
-	print(percentage)
 	for i in range(len(polygons[-1])):
 		#Get all the ith elements 
 		cluster_check = [cluster[i] for cluster in polygons]
@@ -67,8 +99,6 @@ def consistency_filter(polygons,polygons_info,percent=0.9):
 		for cluster in cluster_check:
 			if len(cluster) <= 1:
 				j += 1
-		print('j')
-		print(j)
 		#If more nan than defined percentage remove from the lists
 		if j > percentage:
 			to_remove.append(i)
@@ -81,77 +111,198 @@ def consistency_filter(polygons,polygons_info,percent=0.9):
 
 	return polygons,polygons_info
 
-#Using intersection over union method to track the same mushrooms for coordinate lists
-def coordinate_sort(polygons,basis,polygons_info,baseline):
-    temp = []
-    temp_baseline = []
-    #Iterate through the 'base polygons'
-    for base in basis:
-        #Set maximum iou to 0 (no intersection)
-        iou_max = 0
-        #Iterate through the next set of bounding boxes
-        i = 0
-        for polygon in polygons:
-            #Looking through normal or empty boxes
-            if len(base) > 1:
-                poly_iou = coordinate_iou(polygon,base)
-                if poly_iou > iou_max:
-                    iou_max = poly_iou
-                    #if check_size(polygon,base):
-                    best_fit = [polygon,polygons_info[i]]  
-            i += 1       
+#Using POLYGON intersection over union method to track the same mushrooms for coordinate lists 
+def polygon_sort(polygons,basis,polygons_info,baseline):
+	temp = []
+	temp_baseline = []
+	iou_baseline = 0.25
+	#Iterate through the 'base polygons'
+	for base in basis:
+		#Set maximum iou to 0 (no intersection)
+		iou_max = 0
+		best_fit = 0
+		#Iterate through the next set of bounding boxes
+		i = 0
+		for polygon in polygons:
+			#Looking through normal or empty boxes
+			if len(base) > 1:
+				poly_iou = coordinate_iou(polygon,base)
+				if poly_iou > iou_max:
+					iou_max = poly_iou
+					#If cluster is fully within an old cluster and small iou -> harvested
+					if poly_iou == 1:
+						#Harvested cluster marking is set to the polygon from the previous image (unharvested) 
+						polygons_info[i][6] = base
+					best_fit = [polygon,polygons_info[i]] 
+			i += 1       
 
-        #Setting best fit box 
-        if (iou_max) >= 0.25:
-            temp.append(best_fit)
-        else:
-            temp.append([[0],[0]])
+		#Setting best fit box 
+		if (iou_max) >= iou_baseline:
+			temp.append(best_fit)
+		else:
+			temp.append([[0],[0]])
 
-    #Adding possible old boxes to the temporary baseline
-    i = 0
-    for poly in temp[0]:
-        #If bounding box is not empty baseline is not required
-        if len(poly) > 1:
-            temp_baseline.append([0])
-        else:
-            temp_baseline.append(baseline[i])
-        i += 1
-    
-    #Checking to see if an old box has returned
-    for polygon in polygons:
-        iou_max = 0
-        i = 0
-        for previous in temp_baseline:
-            if len(previous) > 1:
-                poly_iou = coordinate_iou(polygon,previous)
-                if poly_iou > iou_max:
-                    iou_max = poly_iou
-                    best_fit = [polygon,polygons_info[i]]
-                    #to locate position of the old box
-                    location = i
-            i += 1
-        if iou_max >= 0.5:
-            temp[location] = best_fit
+	#Adding possible old boxes to the temporary baseline
+	i = 0
+	for poly in temp:
+		#If bounding box is not empty baseline is not required
+		if len(poly[0]) == 1:
+			temp_baseline.append(baseline[i])
+		#If harvested cluster pass along the polygon outline
+		elif len(poly[1][6]) != 1:
+			temp_baseline.append(poly[1][6])
+		#Cluster recognized no need for inclusion in baseline
+		else:
+			temp_baseline.append([0])
+		i += 1
 
-    if basis != []:
-        i = 0
-        for polygon in polygons:
-            #Checking for boxes not yet included
-            included = False 
-            for base in temp:
-                if not isinstance(base[0],int): 
-                    if len(polygon) == len(base[0]):   
-                        if np.allclose(base[0],polygon): 
-                            included = True
-            #Add the new box if it is not included
-            if not included:
-                temp.append([polygon,polygons_info[i]]) 
-            i += 1
-    
-    polygons_temp = [x[0] for x in temp]
-    info_temp = [x[1] for x in temp]
+	#Checking to see if an old box has returned
+	index = 0
+	for polygon in polygons:
+		iou_max = 0
+		i = 0
+		for previous in temp_baseline:
+			if len(previous) > 1:
+				poly_iou = coordinate_iou(polygon,previous)
+				if poly_iou > iou_max:
+					iou_max = poly_iou
+					#Check for harvested cluster recognized in temp_baseline
+					if poly_iou == 1:
+						for base in baseline:
+							#If cluster recognized set harvetsed marker as previous from temp_baseline
+							if len(previous) == len(base):
+								if np.allclose(previous,base):
+									polygons_info[index][6] = previous
+							# 		best_fit = [previous,polygons_info[index]]
+							# 	else:
+							# 		best_fit = [previous,polygons_info[index]]
+							# else:
+						best_fit = [previous,polygons_info[index]]
+					else: 
+						best_fit = [polygon,polygons_info[index]]
+					#to locate position of the old box
+					location = i
+			i += 1
+		index +=1
 
-    return polygons_temp,info_temp
+		if iou_max >= iou_baseline:
+			temp[location] = best_fit
+
+	if basis != []:
+		i = 0
+		for polygon in polygons:
+			#Checking for boxes not yet included
+			included = False 
+			for base in temp:
+				if not isinstance(base[0],int): 
+					if len(polygon) == len(base[0]):   
+						if np.allclose(base[0],polygon): 
+							included = True
+					elif len(base[1]) > 1:  
+						if len(base[0]) == len(base[1][6]):
+							included = True
+			#Add the new box if it is not included
+			if not included:
+				temp.append([polygon,polygons_info[i]]) 
+			i += 1
+
+	polygons_temp = [x[0] for x in temp]
+	info_temp = [x[1] for x in temp]
+
+	return polygons_temp,info_temp
+
+#Using BBOX intersection over union method to track the same mushrooms for coordinate lists 
+def bbox_sort(polygons_info,prev_polygons_info,polygons,baseline):
+	temp = []
+	temp_baseline = []
+	iou_baseline = 0.25
+	#Iterate through the 'base polygons'
+	for prev_poly_info in prev_polygons_info:
+		#Set maximum iou to 0 (no intersection)
+		iou_max = 0
+		best_fit = 0
+		#Iterate through the next set of bounding boxes
+		i = 0
+		for poly_info in polygons_info:
+			#Looking through normal or empty boxes
+			if len(prev_poly_info) > 1:
+				#poly_iou = coordinate_iou(polygon,base)
+				poly_iou = box_iou(poly_info[5],prev_poly_info[5]) 
+				if poly_iou > iou_max:
+					iou_max = poly_iou
+					best_fit = [poly_info,polygons[i]]
+			i += 1       
+
+		#Setting best fit box 
+		if (iou_max) >= iou_baseline:
+			temp.append(best_fit)
+		else:
+			temp.append([[0],[0]])
+
+	#Adding possible old boxes to the temporary baseline
+	i = 0
+	for temp_info in temp:
+		#If bounding box is not empty baseline is not required
+		if temp_info != [[0],[0]]:
+			temp_baseline.append([0])
+		else:
+			temp_baseline.append(baseline[i])
+		i += 1
+
+	#Checking to see if an old box has returned
+	for poly_info in polygons_info:
+		iou_max = 0
+		i = 0
+		index = 0
+		for temp_info in temp_baseline:
+			if temp_info != [0]:
+				poly_iou = box_iou(poly_info[5],temp_info[5])
+				if poly_iou > iou_max:
+					iou_max = poly_iou
+					best_fit = [poly_info,polygons[i]]
+					print('best fit')
+					print(best_fit[0])
+					for poly in polygons:
+						print(poly[0])
+					print('best fit 2')
+					print(best_fit[1][0])
+					print(i)
+					print(index)
+					#to locate position of the old box
+					location = i
+			i += 1
+		index +=1
+
+		if iou_max >= iou_baseline:
+			temp[location] = best_fit
+
+	info_temp = [x[0] for x in temp]
+	polygons_temp = [x[1] for x in temp]
+	print('set 1')
+	for polygons in info_temp:
+		print(polygons)
+	for polygons in polygons_temp:
+		print(polygons[0])
+
+	if prev_poly_info != []:
+		i = 0
+		for poly_info in polygons_info:
+			#Checking for boxes not yet included
+			included = False 
+			for base in temp:
+				if not base[0] == [0]: 
+					if len(poly_info[5]) == len(base[0][5]):   
+						if np.allclose(base[0][5],poly_info[5]): 
+							included = True
+			#Add the new box if it is not included
+			if not included:
+				temp.append([poly_info,polygons[i]]) 
+			i += 1
+
+	info_temp = [x[0] for x in temp]
+	polygons_temp = [x[1] for x in temp]
+
+	return polygons_temp,info_temp
 
 #Iterating through the images and performing the predictions and depth estimations
 def image_processing(confidence_score_threshold,test_set,test_set_path,predicted_images,averaged_length_pixels,mushroom_model,visualizer,stereo_option,env_option,dynamic_substrate_option):
@@ -175,7 +326,7 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 
 		# check and adjust brightness
 		list_of_brightness.append(brightness(test_set_path + test_img))
-		if abs(list_of_brightness[-1] - np.mean(list_of_brightness))>3*np.std(list_of_brightness):
+		if abs(list_of_brightness[-1] - np.mean(list_of_brightness))>4*np.std(list_of_brightness):
 			print("Image with outlier brightness (lights on) detected and skipped: ", test_img)
 			list_of_brightness.pop()
 			continue
@@ -210,8 +361,8 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 
 		# Mushroom segmentation inference
 		image_result = inference_detector(mushroom_model, img)
-		image_result = delete_low_confidence_predictions(image_result) 
-		image_result = delete_overlapping_with_lower_confidence(image_result)
+		image_result = delete_low_confidence_predictions(image_result,confidence_score_threshold)
+		image_result = delete_overlapping_with_lower_confidence(image_result,iou_threshold=0.7)
 
 		# show the results
 		visualizer.add_datasample(
@@ -251,6 +402,7 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 				results.append(points[hull])
 
 				#Caclulating cluster pixel sizing
+				cluster_bbox = np.array([result[1][0],result[1][1],result[1][2],result[1][3]]).astype(int)
 				pixel_cluster_width = result[1][2] - result[1][0]
 				pixel_cluster_height = result[1][3] - result[1][1]
 				#Getting cluster label
@@ -259,17 +411,21 @@ def image_processing(confidence_score_threshold,test_set,test_set_path,predicted
 				if dynamic_substrate_option:
 					absolute_cluster_width = round(pixel_cluster_width*substrate_real_size/averaged_length_pixels[i],3)
 					absolute_cluster_height = round(pixel_cluster_height*substrate_real_size/averaged_length_pixels[i],3)
-					results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width])
+					#Results info include: Cluster label, bbox height/width, absolute height/width, bbox coordinates, and cluster harvest marker [0] 
+					results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width,cluster_bbox,[0]])
 				else:
 					absolute_cluster_width = round(pixel_cluster_width*substrate_real_size/averaged_length_pixels[-1],3)
 					absolute_cluster_height = round(pixel_cluster_height*substrate_real_size/averaged_length_pixels[-1],3)
-					results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width])
+					#Results info include: Cluster label, bbox height/width, absolute height/width, bbox coordinates, and cluster harvest marker [0]
+					results_info.append([cluster_label,pixel_cluster_height,pixel_cluster_width,absolute_cluster_height,absolute_cluster_width,cluster_bbox,[0]])
 	
 		#Saving the hull results for all the clusters in the image
 		polygons.append(results)
 		polygons_info.append(results_info)
 
 		i += 1
+
+		print('Cluster Model Image {}'.format(i))
 
 	return 	images,image_files,data,polygons,polygons_info,stereo_depth_images,img_size
 
