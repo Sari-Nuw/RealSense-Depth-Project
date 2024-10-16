@@ -5,7 +5,7 @@ from mmdet.apis import inference_detector,init_detector
 import numpy as np
 import cv2
 from concave_hull import concave_hull_indexes
-from Mask_Generator_Utils_Common import *
+from Realtime_Utils_Common import *
 from Segment_Crop import *
 from mmdet.registry import VISUALIZERS
 from Environmental_Tracking import *
@@ -22,42 +22,26 @@ def brightness(im_file):
     return math.sqrt(0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2))
 
 #Sorting clusters for tracking
-def cluster_sort(polygons,polygons_info):
-
-	#Establishing baseline for sorting
-	baseline = []
-
-	# for i in range (len(polygons)):
-	# 	for j in range(len(polygons[i])):
-	# 		centre = Polygon(polygons[i][j]).centroid
-	# 		if j != 5:
-	# 			cv2.polylines(images[i], np.int32([polygons[i][j]]), True, (255, 0, 0), 5)
-	# 			if j > 5:
-	# 				cv2.putText(images[i], 'Pred{}'.format(j-1), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
-	# 			else:
-	# 				cv2.putText(images[i], 'Pred{}'.format(j), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
-	# 		os.makedirs(working_folder + "/Unsorted/",exist_ok=True)
-	# 		cv2.imwrite(working_folder + "/Unsorted/image ({}).JPG".format(i+1), cv2.cvtColor(images[i],cv2.COLOR_RGB2BGR))
-	# 		print(i,j)
+def cluster_sort(polygons,polygons_info,baseline):
 
 	#Sorting the bounding boxes for consistency 
 	#POLYGON SORTED VERSION
-	i = 0
-	while baseline == []:
-		if polygons[i] != []:
-			baseline = polygons[i].copy()
-			start = i
-		i += 1
+	#Establishing baseline
+	if baseline == []:
+		#Check for polygons to set baseline
+		if polygons[-1] != []:
+			baseline = polygons[-1].copy()
+		#Exit the function after establishing baseline or if no polygons
+		return polygons,polygons_info,baseline
 
-	for i in range(start,len(polygons)-1):
-		polygons[i+1],polygons_info[i+1] = polygon_sort(polygons[i+1],polygons[i],polygons_info[i+1],baseline)
-        #Updating baseline
-		for j in range(len(polygons[i+1])):
-			if len(polygons[i+1][j]) > 1:
-				if j < (len(baseline)):
-					baseline[j] = polygons[i+1][j]
-				else:
-					baseline.append(polygons[i+1][j])
+	polygons[-1],polygons_info[-1] = polygon_sort(polygons[-1],polygons[-2],polygons_info[-1],baseline)
+	#Updating baseline
+	for j in range(len(polygons[-1])):
+		if len(polygons[-1][j]) > 1:
+			if j < (len(baseline)):
+				baseline[j] = polygons[-1][j]
+			else:
+				baseline.append(polygons[-1][j])
 
 	#BOUNDING BOX SORTED VERSION
 
@@ -78,14 +62,7 @@ def cluster_sort(polygons,polygons_info):
 	# 			else:
 	# 				baseline.append(polygons_info[i+1][j])
 
-	#CHECK THE CODE BELOW. WHAT IS ITS EXACT PURPOSE???
-    #Adding null points to make the list equal sizes
-	for i in range(len(polygons)):
-		while len(polygons[i]) < len(polygons[-1]):
-			polygons[i].append([0])
-			polygons_info[i].append([0])
-
-	return polygons,polygons_info
+	return polygons,polygons_info,baseline
 
 #Remove indexes that dont appear consistently
 def consistency_filter(polygons,polygons_info,percent=0.9):
@@ -112,10 +89,10 @@ def consistency_filter(polygons,polygons_info,percent=0.9):
 	return polygons,polygons_info
 
 #Using POLYGON intersection over union method to track the same mushrooms for coordinate lists 
-def polygon_sort(polygons,basis,polygons_info,baseline):
+def polygon_sort(polygons,basis,polygons_info,baseline,iou_baseline = 0.2):
 	temp = []
 	temp_baseline = []
-	iou_baseline = 0.25
+	iou_string = []
 	#Iterate through the 'base polygons'
 	for base in basis:
 		#Set maximum iou to 0 (no intersection)
@@ -127,34 +104,61 @@ def polygon_sort(polygons,basis,polygons_info,baseline):
 			#Looking through normal or empty boxes
 			if len(base) > 1:
 				poly_iou = coordinate_iou(polygon,base)
-				if poly_iou > iou_max:
+				if poly_iou > iou_max or poly_iou == 1:
 					iou_max = poly_iou
 					#If cluster is fully within an old cluster and small iou -> harvested
 					if poly_iou == 1:
 						#Harvested cluster marking is set to the polygon from the previous image (unharvested) 
 						polygons_info[i][6] = base
 					best_fit = [polygon,polygons_info[i]] 
-			i += 1       
+			i += 1      
 
 		#Setting best fit box 
 		if (iou_max) >= iou_baseline:
 			temp.append(best_fit)
 		else:
 			temp.append([[0],[0]])
+		
+		if len(temp[-1][0]) > 1:
+			iou_string.append([iou_max,best_fit[-1][-1][0]])
+		else:
+			iou_string.append([iou_max,0])
+
+	#Testing purposes
+	temp_string = []
+	for poly in temp:
+		temp_string.append(poly[0][0])
+	print('temp string 1')
+	print(temp_string) 
+	print(iou_string)
 
 	#Adding possible old boxes to the temporary baseline
 	i = 0
+	check_string = []
 	for poly in temp:
 		#If bounding box is not empty baseline is not required
+		#print(len(poly[0]),poly[1])
 		if len(poly[0]) == 1:
+			check_string.append('baseline')
 			temp_baseline.append(baseline[i])
 		#If harvested cluster pass along the polygon outline
 		elif len(poly[1][6]) != 1:
+			check_string.append('harvest')
+			#print('append poly[1][6]',len(poly[0]),poly[1])
 			temp_baseline.append(poly[1][6])
 		#Cluster recognized no need for inclusion in baseline
 		else:
+			check_string.append('none')
 			temp_baseline.append([0])
 		i += 1
+
+	#Testing purposes
+	temp_string = []
+	for poly in temp_baseline:
+		temp_string.append(poly[0])
+	print('temp base string')
+	print(temp_string)
+	print(check_string)
 
 	#Checking to see if an old box has returned
 	index = 0
@@ -164,7 +168,7 @@ def polygon_sort(polygons,basis,polygons_info,baseline):
 		for previous in temp_baseline:
 			if len(previous) > 1:
 				poly_iou = coordinate_iou(polygon,previous)
-				if poly_iou > iou_max:
+				if poly_iou > iou_max or poly_iou == 1:
 					iou_max = poly_iou
 					#Check for harvested cluster recognized in temp_baseline
 					if poly_iou == 1:
@@ -173,10 +177,7 @@ def polygon_sort(polygons,basis,polygons_info,baseline):
 							if len(previous) == len(base):
 								if np.allclose(previous,base):
 									polygons_info[index][6] = previous
-							# 		best_fit = [previous,polygons_info[index]]
-							# 	else:
-							# 		best_fit = [previous,polygons_info[index]]
-							# else:
+									print('check here', polygon[0],previous[0])
 						best_fit = [previous,polygons_info[index]]
 					else: 
 						best_fit = [polygon,polygons_info[index]]
@@ -187,6 +188,16 @@ def polygon_sort(polygons,basis,polygons_info,baseline):
 
 		if iou_max >= iou_baseline:
 			temp[location] = best_fit
+		
+			iou_string[location] =[iou_max,best_fit[-1][-1][0]]
+
+	#Testing purposes
+	temp_string = []
+	for poly in temp:
+		temp_string.append(poly[0][0])
+	print('temp string 2')
+	print(temp_string)
+	print(iou_string)
 
 	if basis != []:
 		i = 0
@@ -208,6 +219,15 @@ def polygon_sort(polygons,basis,polygons_info,baseline):
 
 	polygons_temp = [x[0] for x in temp]
 	info_temp = [x[1] for x in temp]
+
+	info_string = []
+	for info in info_temp:
+		if len(info) > 1:
+			info_string.append(info[6][0])
+		else:
+			info_string.append(0)
+	print('info string')
+	print(info_string)
 
 	return polygons_temp,info_temp
 
@@ -526,13 +546,31 @@ def write_cluster_sizing(cluster_segments,working_folder):
 		#Creating the csv writer
 		writer = csv.writer(csv_file)
 		#Writing the first row with all the headers
-		writer.writerow(['Image #','Cluster #','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])
+		writer.writerow(['Image #','Cluster #','Cluster Pixel Area','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])
 		for segment in cluster_segments:
 			if segment == []:
 				writer.writerow('')
 			else:
-				writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3][0],segment[3][1],segment[3][2],segment[3][3],segment[3][4],segment[4][0],segment[4][1],segment[4][2],segment[4][3],segment[4][4],segment[4][5]])
+				writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3],segment[4][0],segment[4][1],segment[4][2],segment[4][3],segment[4][4],segment[5][0],segment[5][1],segment[5][2],segment[5][3],segment[5][4],segment[5][5],segment[4][6]])
 
 	df = pd.read_csv(working_folder + '/Cluster_Sizing.csv')
 	df.to_csv(working_folder + '/Cluster_Sizing_excel_format.csv', sep=";", decimal=",")
 
+#Writing information from cluster_segments to excel file
+def write_cluster_sizing_dynamic(segment,working_folder):
+	with open(working_folder + '/Dynamic_Cluster_Sizing.csv', 'a',newline='') as csv_file:
+		#Creating the csv writer
+		writer = csv.writer(csv_file)
+		#Writing new row
+		if segment == []:
+			writer.writerow('')
+		else:
+			writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3],segment[4][0],segment[4][1],segment[4][2],segment[4][3],segment[4][4],segment[5][0],segment[5][1],segment[5][2],segment[5][3],segment[5][4],segment[5][5],segment[4][6]])
+
+#Writing information from cluster_segments to excel file
+def establish_cluster_sizing_dynamic(working_folder):
+	with open(working_folder + '/Dynamic_Cluster_Sizing.csv', 'w',newline='') as csv_file:
+		#Creating the csv writer
+		writer = csv.writer(csv_file)
+		#Writing the first row with all the headers
+		writer.writerow(['Image #','Cluster #','Cluster Pixel Area','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])

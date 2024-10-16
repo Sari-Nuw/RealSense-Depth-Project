@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from mmdet.structures.det_data_sample import DetDataSample#			!!!!!!!!!!!!!!
 from mmengine.structures.instance_data import InstanceData#			!!!!!!!!!!!!!!
 import torchvision.ops.boxes as bops#			!!!!!!!!!!!!!!
+import matplotlib.cm as cm
 
 def annotation_iou(annotations,poly,full_image,centre):
 	iou_max = 0
@@ -88,7 +89,7 @@ def cluster_sizing(bounding,x_diff,y_diff,poly,image,numbering):
     return segments,numbering
 
 #Calculating intersection over union for coordiante list 
-def coordinate_iou(poly,base):
+def coordinate_iou(poly,base,margin = 0.005,iou_threshold = 0.02):
 
 	poly1 = Polygon(poly).buffer(0)
 	poly2 = Polygon(base).buffer(0)
@@ -103,10 +104,8 @@ def coordinate_iou(poly,base):
 	iou = intersect / union
 
 	#Check for full overlap and small cluster (harvested cluster) based on overlap margin
-	margin = 0.03
-	if (poly1.area >= (1-margin)*intersect and poly1.area <= (1+margin)*intersect and iou <= 0.3) or (poly2.area >= (1-margin)*intersect and poly2.area <= (1+margin)*intersect and iou <= 0.3):
-	#if (poly1.area == intersect and iou <= 0.3) or (poly2.area == intersect and iou <= 0.3):
-		print(poly1.area, poly2.area, intersect)
+	if (poly1.area >= (1-margin)*intersect and poly1.area <= (1+margin)*intersect and iou <= iou_threshold) or (poly2.area >= (1-margin)*intersect and poly2.area <= (1+margin)*intersect and iou <= iou_threshold):
+		print(poly1.area, poly2.area, (1-margin)*intersect, (1+margin)*intersect, intersect, iou)
 		return 1
 	else:
 		return iou
@@ -172,6 +171,28 @@ def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.7):#			!!!
     result["pred_instances"]["labels"] = np.delete(result["pred_instances"]["labels"],to_delete, axis=0)
 
     return dict_to_det_data_sample(result)
+
+#Check for overlapping predictions and blocking the later result. Later result is not deleted to prevent the number from being used again
+def block_overlapping_with_lower_confidence_polygons(polygons,iou_threshold = 0.7):#			!!!!!!!!!!!!!!
+
+	to_block = []
+	## iterate through all existing pairs of predictions
+	for idx in range(len(polygons[-1])):
+		for idy in range(idx+1,len(polygons[-1])):
+			if len(polygons[-1][idx]) > 1 and len(polygons[-1][idy]) > 1:
+				iou = coordinate_iou(polygons[-1][idx],polygons[-1][idy])
+				## if iou is above a defined threshold the two prediction are referring to the same instance,
+				## so we find the one with the lower classification/confidence score and keep its index to be deleted
+				if iou>iou_threshold:
+					to_block.append(idy)
+
+	sorted(to_block)
+
+	## delete from all components of the result variable the overlapping instances with classification/confidence score
+	for id in reversed(to_block):
+		polygons[-1][id] = [0]
+
+	return polygons
 
 #Getting annotations from text file (JSON Coco format)
 def get_annotations(text_file):
@@ -307,32 +328,39 @@ def line_clip(line,poly,image,numbering):
 	return segment_lengths,numbering
 
 #Gathering the information from individual clusters across images to be able to track their growth
-def line_setup(polygons,polygons_info,img_size):
+def line_setup(polygons,polygons_info,lines,img_size):
 
 	#Sizing segmented areas from the images
-	mask_sizes = [[] for _ in range(len(polygons))]
+	mask_sizes = []
 	i = 0
 	for polygon in polygons:
-		j = 0
-		for poly in polygon:
-			#Getting area of each polygon
-			if len(poly) > 1 and len(polygons_info[i][j][6]) == 1:
-				p = Polygon(poly)
-				segment = round((p.area/img_size*100),4)
-				mask_sizes[i].append(segment)
-			else:
-				mask_sizes[i].append(0)
-			j += 1
+		# j = 0
+		# for poly in polygon:
+		#Getting area of each polygon
+		if len(polygon) > 1 and len(polygons_info[i][6]) == 1:
+			segment = round((Polygon(polygon).area/img_size*100),4)
+			mask_sizes.append(segment)
+		else:
+			mask_sizes.append(0)
+			# j += 1
 		i += 1
 
 	#To store all the different lines based on total number of 'box points' found
-	lines = [[] for _ in range(len(polygons[-1]))]
+	if lines == []:
+		lines = ([[] for _ in range(len(polygons))])
+	else:
+		while len(lines) < len(mask_sizes):
+			new_line = []
+			while len(new_line) < len(lines[-1]):
+				new_line.append(float('nan'))
+			lines.append(new_line)
+
+	#To update each line
 	for i in range(len(mask_sizes)):
-		for j in range(len(polygons[i])):
-			if mask_sizes[i][j] == 0:
-				lines[j].append(float('nan'))
-			else:
-				lines[j].append(mask_sizes[i][j])
+		if mask_sizes[i] == 0:
+			lines[i].append(float('nan'))
+		else:
+			lines[i].append(mask_sizes[i])
 
 	#Iterating across each line
 	for line in lines:
@@ -369,11 +397,8 @@ def line_setup(polygons,polygons_info,img_size):
 					count -= 1
 					j += 1
 
-	#Initializing x-axis (/2 to convert Time to hours if in series)
-	x_axis = np.linspace(0,len(mask_sizes),num = len(mask_sizes))#/2
-
 	#Trimming empty sections of lines 
-	for i in range(len(polygons[-1])):
+	for i in range(len(polygons)):
 		number = False
 		j = 0
 		#Skipping over beggining sections of lines if they are emtpy (nan)
@@ -381,9 +406,8 @@ def line_setup(polygons,polygons_info,img_size):
 			if ~np.isnan(lines[i][j]):
 				number = True 
 			j += 1
-		print('lines ', lines[i])
 
-	return lines,x_axis
+	return lines
 
 #Erode the image
 def mask_erosion(cluster_depth_mask,kernel_size=21,iterations=3):
@@ -403,14 +427,17 @@ def pixel_absolute_area(pixel_area,averaged_length_pixels,substrate_size):
 
 #Plotting the growth curves
 def plot_growth(polygons,x_axis,lines):
-    fig, axs = plt.subplots()
-    for i in range(len(polygons[-1])):
-        axs.plot(x_axis,lines[i], label = 'Cluster {}'.format(i))
-    #Displaying the graphs
-    axs.set_xlabel('Image')
-    axs.set_ylabel('Relative Size by Pixel Number')
-    axs.legend()
-    plt.show()
+
+	colors = cm.get_cmap('tab20', 20)
+
+	fig, axs = plt.subplots()
+	for i in range(len(polygons[-1])):
+		axs.plot(x_axis,lines[i], label = 'Cluster {}'.format(i),color=colors(i))
+	#Displaying the graphs
+	axs.set_xlabel('Image')
+	axs.set_ylabel('Relative Size by Pixel Number')
+	axs.legend()
+	plt.show()
 	
 #Detecting and sizing the substrate in the image
 def substrate_processing(substrate_model,test_set,test_set_path,working_folder):
