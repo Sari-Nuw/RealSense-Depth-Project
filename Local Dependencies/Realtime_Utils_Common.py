@@ -89,7 +89,7 @@ def cluster_sizing(bounding,x_diff,y_diff,poly,image,numbering):
     return segments,numbering
 
 #Calculating intersection over union for coordiante list 
-def coordinate_iou(poly,base,margin = 0.005,iou_threshold = 0.02):
+def coordinate_iou(poly,base,margin = 0.2,iou_threshold = 0.05):
 
 	poly1 = Polygon(poly).buffer(0)
 	poly2 = Polygon(base).buffer(0)
@@ -103,12 +103,51 @@ def coordinate_iou(poly,base,margin = 0.005,iou_threshold = 0.02):
 	union = poly1.union(poly2).area
 	iou = intersect / union
 
+	print('coordinate iou')
+	print(poly[0],base[0],poly1.area, poly2.area, (1-margin)*intersect, (1+margin)*intersect, intersect, iou)
+
 	#Check for full overlap and small cluster (harvested cluster) based on overlap margin
-	if (poly1.area >= (1-margin)*intersect and poly1.area <= (1+margin)*intersect and iou <= iou_threshold) or (poly2.area >= (1-margin)*intersect and poly2.area <= (1+margin)*intersect and iou <= iou_threshold):
-		print(poly1.area, poly2.area, (1-margin)*intersect, (1+margin)*intersect, intersect, iou)
+	if (poly1.area >= ((1-margin)*intersect) and poly1.area <= ((1+margin)*intersect) and iou <= iou_threshold) or (poly2.area >= ((1-margin)*intersect) and poly2.area <= ((1+margin)*intersect) and iou <= iou_threshold):
 		return 1
 	else:
 		return iou
+
+#Checking whether a polygon is from a harvested area
+def check_harvest(polygons,polygons_info,baseline,margin = 0.005,iou_threshold = 0.02):
+
+	i = 0
+	to_delete = []
+	for polygon in polygons:
+		for base in baseline:
+
+			poly1 = Polygon(polygon).buffer(0)
+			poly2 = Polygon(base).buffer(0)
+
+			#Getting intersection of both polygons
+			intersect = poly1.intersection(poly2).area
+			if intersect == 0:
+				continue
+			
+			#Getting union and intersection over union
+			union = poly1.union(poly2).area
+			iou = intersect / union
+
+			#Check for full overlap and small cluster (harvested cluster) based on overlap margin
+			if (poly1.area >= (1-margin)*intersect and poly1.area <= (1+margin)*intersect and iou <= iou_threshold) or (poly2.area >= (1-margin)*intersect and poly2.area <= (1+margin)*intersect and iou <= iou_threshold):
+				#print(poly1.area, poly2.area, (1-margin)*intersect, (1+margin)*intersect, intersect, iou)
+				to_delete.append(i)
+		i += 1
+
+	#Saving the harvested polygons in a seperate array
+	harvested = []
+	for index in to_delete:
+		harvested.append(polygons[index])
+
+	for index in reversed(to_delete):
+		del polygons[index]
+		del polygons_info[index]
+
+	return harvested
 
 ## dict to MMDetection InstanceData class
 def dict_to_instance_data(instance_dict):#			!!!!!!!!!!!!!!
@@ -145,7 +184,7 @@ def delete_low_confidence_predictions(result,confidence_score_threshold=0.6):#		
     return dict_to_det_data_sample(result)
 
 #Check for overlapping predictions and remove the result with lower confidence
-def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.7):#			!!!!!!!!!!!!!!
+def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.7):
     result = result.cpu().numpy().to_dict()
     to_delete = []
     ## iterate through all existing pairs of predictions
@@ -171,6 +210,77 @@ def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.7):#			!!!
     result["pred_instances"]["labels"] = np.delete(result["pred_instances"]["labels"],to_delete, axis=0)
 
     return dict_to_det_data_sample(result)
+
+def delete_post_background_clusters(result,substrate_result):#!!!!!!!!!!!!!!
+    result = result.cpu().numpy().to_dict()
+    ## expand the borders of substrate bbox to include adjacent clusters that 
+    ## marginally don't have common area with the substrate prediction
+    substrate_bbox = expand_box(substrate_result.cpu()["bboxes"][0],0.025)
+    to_delete = []
+    ## iterate through each of the predictions
+    for idy in range(len(result["pred_instances"]["bboxes"])):
+        box2 = torch.tensor([result["pred_instances"]["bboxes"][idy]], dtype=torch.float)
+        substrate_iou = bops.box_iou(substrate_bbox, box2)
+        ## first check is to have common area with the expanded substrate, this filters out the far away instances
+        if substrate_iou == 0:
+            to_delete.append(idy)
+        # else:
+        #     preds_iou = []
+        #     ## iterate through each of the previous frame bboxes
+        #     for idx in range(len(post_harvest_polygons_info_base)):
+        #         box1 = torch.tensor([post_harvest_polygons_info_base[idx][5]], dtype=torch.float)
+        #         ## calculate each iou
+        #         preds_iou.append(bops.box_iou(box1, box2))     
+        #     ## if all ious are 0 then the cluster is in the background not near the substrate
+        #     if all(pred_iou == 0 for pred_iou in preds_iou):
+        #         continue
+        #     ## if at least one iou is greater than the threshold then the cluster is being tracked already and is not harvested yet
+        #     ## there is a small possibility for error if a background cluster is directly behind the harvested cluster, which 
+        #     ## will result in high iou and will be recognized as the harvested cluster still existing.
+        #     ## This maybe can be solved in later implementations with the relative depth calculation.
+        #     elif any(pred_iou>=iou_threshold for pred_iou in preds_iou):
+        #         continue
+        #     ## if a new prediction has small iou, lower than the threshold, with at least one of the previous predictions is an
+        #     ## indicator of a background cluster appearing after harvesting of the foreground clusters
+        #     else: #any(pred_iou !=0 and pred_iou<iou_threshold for pred_iou in preds_iou)
+        #         to_delete.append(idy)
+                    
+    ## delete from all components of the result variable the overlapping instances with classification/confidence score
+    result["pred_instances"]["bboxes"] = np.delete(result["pred_instances"]["bboxes"],to_delete, axis=0)
+    result["pred_instances"]["scores"] = np.delete(result["pred_instances"]["scores"],to_delete, axis=0)
+    result["pred_instances"]["masks"] = np.delete(result["pred_instances"]["masks"],to_delete, axis=0)
+    result["pred_instances"]["labels"] = np.delete(result["pred_instances"]["labels"],to_delete, axis=0)
+
+    return dict_to_det_data_sample(result)
+
+def expand_box(box, scale_factor=0.10):#!!!!!!!!!!!!!!
+    """
+    Expand the bounding box by a given scale factor (default is 10%).
+
+    Args:
+    - box: (Tensor) Bounding box in format [x_min, y_min, x_max, y_max]
+    - scale_factor: (float) Fraction by which to expand the bounding box.
+
+    Returns:
+    - expanded_box: (Tensor) The expanded bounding box.
+    """
+    # Calculate the width and height of the box
+    width = box[2] - box[0]
+    height = box[3] - box[1]
+
+    # Calculate the expansion in both width and height (10% by default)
+    delta_w = width * scale_factor
+    delta_h = height * scale_factor
+
+    # Expand the box
+    x_min_expanded = box[0] - delta_w / 2
+    y_min_expanded = box[1] - delta_h / 2
+    x_max_expanded = box[2] + delta_w / 2
+    y_max_expanded = box[3] + delta_h / 2
+
+    # Return the expanded box
+    expanded_box = torch.tensor([[x_min_expanded, y_min_expanded, x_max_expanded, y_max_expanded]])
+    return expanded_box
 
 #Check for overlapping predictions and blocking the later result. Later result is not deleted to prevent the number from being used again
 def block_overlapping_with_lower_confidence_polygons(polygons,iou_threshold = 0.7):#			!!!!!!!!!!!!!!
@@ -280,6 +390,61 @@ def get_annotations(text_file):
 		
 	return(images_int)
 
+#Process annotation metrices for each image
+def get_annotation_metrics(annotations,polygons):
+
+	#Storing true positive, false positive, and false negative values at different iou threshold values
+	TP_array = []
+	FP_array = []
+	FN_array = []
+
+	#Iterating between iou_threshold of 0.5-0.95 to calculate the mAP,mAR, and F1-score
+	iou_threshold = 0.5
+	while iou_threshold < 1:
+		#Track true positive detections
+		TP = 0
+		#To check whether an annotation/polygon have been recognized/matched 
+		annotations_check = [False for _ in range(len(annotations))]
+		i = 0
+		for polygon in polygons:
+			#To iterate across annotation check
+			i = 0
+			for annotation in annotations:
+				iou = coordinate_iou(annotation,polygon)
+				if iou >= iou_threshold:
+					#Each annotation should only be detected once. Extra detections ae false positives
+					if annotations_check[i] == False:
+						TP += 1
+						annotations_check[i] = True
+				i += 1
+	
+		#False Negative. Annotation was never detected
+		FN = len(annotations) - TP
+
+		#False positive. Polygon was detected where there should not be a detection
+		FP = len(polygons) - TP
+
+		#Saving the metrics at this interval
+		TP_array.append(TP)
+		FP_array.append(FP)
+		FN_array.append(FN) 
+
+		iou_threshold += 0.05
+
+	#Precison and recall arrays
+	precision_array = []
+	recall_array = []
+	for i in range(len(TP_array)):
+		precision_array.append(TP_array[i]/(TP_array[i]+FP_array[i]))
+		recall_array.append(TP_array[i]/(TP_array[i]+FN_array[i]))
+
+	#Mean average precision and mean average recall
+	mAP = sum(precision_array)/len(precision_array)
+	mAR = sum(recall_array)/len(recall_array)
+	F1 = (2*mAP*mAR)/(mAP+mAR)
+
+	return mAP, mAR, F1, TP_array, FP_array, FN_array
+
 #Getting image files
 def get_test_set(test_set_path):
 	test_set = sorted(os.listdir(test_set_path))
@@ -334,15 +499,12 @@ def line_setup(polygons,polygons_info,lines,img_size):
 	mask_sizes = []
 	i = 0
 	for polygon in polygons:
-		# j = 0
-		# for poly in polygon:
 		#Getting area of each polygon
-		if len(polygon) > 1 and len(polygons_info[i][6]) == 1:
+		if len(polygon) > 1:
 			segment = round((Polygon(polygon).area/img_size*100),4)
 			mask_sizes.append(segment)
 		else:
 			mask_sizes.append(0)
-			# j += 1
 		i += 1
 
 	#To store all the different lines based on total number of 'box points' found
