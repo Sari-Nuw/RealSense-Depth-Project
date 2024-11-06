@@ -1,11 +1,13 @@
 from shapely.geometry import Polygon
 from Environmental_Tracking import *
 from Information_Processing_Utilities import *
+from Metrics_Utilities import *
 from Model_Processing_Utilities import *
 from Filtration_Utilities import *
 from Sorting_utilities import *
 from mmdet.apis import inference_detector
 import mmcv
+import copy
 
 ###Different utility options###
 
@@ -19,7 +21,7 @@ if env_option:
     tracking_option = True 
 
 #Generate images with cluster lengths/widths measured in pixels
-cluster_sizing_option = False
+cluster_sizing_option = True
 if cluster_sizing_option:
     tracking_option = True
 
@@ -32,11 +34,6 @@ if array_option:
 #Compare the predicted masks with the hand-annotated masks
 annotation_option = True
 
-#To draw out the harvested clusters
-visualise_harvest = False
-if visualise_harvest:
-    tracking_option = True
-
 #Names of the instance segmentation models being used
 mushroom_architecture_selected = "mushroom_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
 substrate_architecture_selected = "substrate_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
@@ -47,7 +44,7 @@ configs_folder = "./configs/"
 predicted_images = working_folder + 'predicted_images/'
 
 #Path to images
-test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Hungary Mushrooms//"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Timelapse3//"
 
 #Pathway to the environemntal files
 if env_option:
@@ -55,17 +52,19 @@ if env_option:
 
 #Name and pathway to the relevant annotation text file 
 if annotation_option:
-    annotations = get_annotations('hungary_annotations.txt')
+    annotations, sorting_annotations = annotation_tracking('Full3.json')
 
 # Creating the output folders
 os.makedirs(working_folder,exist_ok=True)
 os.makedirs(predicted_images,exist_ok=True)
 os.makedirs(working_folder + "/Annotated/",exist_ok=True)
 os.makedirs(working_folder + "/Unsorted/",exist_ok=True)
+os.makedirs(working_folder + "/Substrate/",exist_ok=True)
 
 #Establishing csv files
 establish_cluster_sizing(working_folder)
 establish_metrics(working_folder)
+establish_mota(working_folder)
 
 #Checking for available cuda/cpu
 use_device = check_cuda()
@@ -83,6 +82,7 @@ data = []
 #Tracking clusters and cluster information 
 polygons = []
 polygons_info = []
+post_harvest_polygons_info_base = []
 
 #Baseline for sorting
 baseline = []
@@ -98,6 +98,12 @@ averaged_length_pixels = []
 presort_metrics = []
 postsort_metrics = []
 
+# Sorting MOTA Metrics
+mota = []
+# False Positive, False Negative, ID Switch, Ground Truth
+mota_metrics = [[],[],[],[]]
+motaTracker = []
+
 #To track cluster sizes
 cluster_segments = []
 
@@ -106,10 +112,14 @@ lines = []
 
 #Confidence thresholds
 confidence_score_threshold = 0.5
+overlapping_iou_threshold = 0.2
+post_harvest_occluded_iou_overlap = 0.5
+harvest_margin = 0.5
+harvest_threshold = 0.05
 
 for img_num in range(len(os.listdir(test_set_path))):
     #To control which images are being processed
-    if img_num > -1 and img_num < 1000:
+    if img_num > -1 and img_num < 300:
 
         test_img = 'img ({}).JPG'.format(img_num+1)
 
@@ -146,16 +156,9 @@ for img_num in range(len(os.listdir(test_set_path))):
 
         #Color correction of the images
         img = mmcv.image.bgr2rgb(img)
-        substrate_img = img.copy()
 
-        #Draw bounding boxes on substrate images
-        for result in substrate_result:
-            sub_result = result["bboxes"].cpu().numpy()[0]
-            cv2.rectangle(substrate_img,(int(sub_result[0]),int(sub_result[1])),(int(sub_result[2]),int(sub_result[3])),(0,0,255),5)
-
-        #Save substrate images
-        os.makedirs(working_folder + "/Substrate/",exist_ok=True)
-        cv2.imwrite(working_folder + "/Substrate/images ({}).JPG".format(img_num+1), cv2.cvtColor(substrate_img,cv2.COLOR_RGB2BGR))
+        # Chcecking substrate results and saving substrate image
+        process_substrate_results(img,substrate_result,working_folder,img_num)
 
         #saving image for processing and image file names 
         images.append(img)
@@ -168,14 +171,26 @@ for img_num in range(len(os.listdir(test_set_path))):
             data_sample=image_result,
             draw_gt = None,
             wait_time=0,
-            out_file=predicted_images + "prediction_" + test_img,
+            out_file=predicted_images + "before_filtration_prediction_" + test_img,
             pred_score_thr=confidence_score_threshold
         )
 
         # Result filters
         image_result = delete_low_confidence_predictions(image_result,confidence_score_threshold)
-        image_result = delete_overlapping_with_lower_confidence(image_result,iou_threshold=0.7)
-        image_result = delete_post_background_clusters(image_result,substrate_result)
+        image_result = delete_overlapping_with_lower_confidence(image_result,overlapping_iou_threshold)
+        if post_harvest_polygons_info_base:
+            image_result = delete_post_background_clusters(image_result,substrate_result,post_harvest_polygons_info_base,post_harvest_occluded_iou_overlap)
+
+        # show the results after filtering
+        visualizer.add_datasample(
+            'result',
+            img,
+            data_sample=image_result,
+            draw_gt = None,
+            wait_time=0,
+            out_file=predicted_images + "after_filtration_prediction_" + test_img,
+            pred_score_thr=confidence_score_threshold
+        )
 
         #Processing of reuslts for use in different data structures
         results, results_info = process_results(image_result,averaged_length_pixels,substrate_real_size = 50)     
@@ -187,21 +202,23 @@ for img_num in range(len(os.listdir(test_set_path))):
         #Pre-sorting annotation metrics
         if annotation_option:
             # Processing instance segmentation metrics after filtration/before sorting
-            mAP, mAR, F1 ,TP, FP, FN = get_annotation_metrics(annotations[img_num],polygons[-1])
-            presort_metrics.append([mAP,mAR,F1,TP,FP,FN])
+            mAP, mAR, AP50, AP75, F1 ,TP, FP, FN = get_annotation_metrics(annotations[img_num],polygons[-1])
+            presort_metrics.append([mAP,mAR, AP50, AP75, F1,TP,FP,FN])
             write_metrics(working_folder,'Presort',presort_metrics[-1],img_num)
             # Saving image with outlined annotations
-            save_annotation_image(img,working_folder,annotations,img_num)
-
+            save_annotation_image(img,working_folder,sorting_annotations,img_num)
 
         #Sorting clusters for tracking
         if tracking_option:
+
+            # Filter out recognized harvested clusters
+            polygons[-1], polygons_info[-1] = harvest_filter(polygons[-1],polygons_info[-1],baseline,harvest_margin,harvest_threshold)
 
             # Show results after filtering and before sorting
             save_unsorted_image(img,polygons,working_folder,img_num)
 
             #Sorting the clusters
-            polygons,polygons_info,baseline,harvested = cluster_sort(polygons,polygons_info,baseline)
+            polygons,polygons_info,baseline = cluster_sort(polygons,polygons_info,baseline)
 
         #Copying the current image for processing
         image_copy = (img, cv2.COLOR_RGB2BGR)[0]
@@ -211,8 +228,10 @@ for img_num in range(len(os.listdir(test_set_path))):
 
         #Post sorting annotation metrics
         if annotation_option:
-            mAP, mAR, F1, TP, FP, FN = get_annotation_metrics(annotations[img_num],polygons[-1])
-            postsort_metrics.append([mAP,mAR,F1,TP,FP,FN])
+            mAP, mAR, AP50, AP75, F1, TP, FP, FN = get_annotation_metrics(annotations[img_num],polygons[-1])
+            mota_metrics, motaTracker = get_sorting_metrics(sorting_annotations[img_num],polygons[-1],mota_metrics,motaTracker)
+            write_mota(working_folder,mota_metrics,img_num)
+            postsort_metrics.append([mAP,mAR, AP50, AP75, F1,TP,FP,FN])
             write_metrics(working_folder,'Postsort',postsort_metrics[-1],img_num)
         
         #Saving the images with predicted polygons
@@ -237,35 +256,42 @@ for img_num in range(len(os.listdir(test_set_path))):
                     write_cluster_sizing(cluster_segments[-1],working_folder)
 
                 #Saving the image with outlined clusters
-                cv2.polylines(full_image, np.int32([poly]), True, (255, 0, 0), 5)
-                #cv2.putText(full_image, '{} {}'.format(j,poly[0]), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
-                cv2.putText(full_image, '{}'.format(j), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
+                cv2.polylines(full_image, np.int32([poly]), True, (255, 0, 0), 10)
+                #cv2.putText(full_image, '{} {}'.format(j,poly[0]), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
+                cv2.putText(full_image, '{}'.format(j), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
 
                 #Saving the image information for an individual cluster in numpy array format
                 if array_option:
                     #Isolate and save the cluster from the original image
                     box_image,local_poly = process_cluster(image_copy,poly,polygons_info[-1][j][5],working_folder,-1,j)
                     save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_folder,img_num,j)
-            j += 1
-        #To draw clusters that are harvested       
-        if visualise_harvest:
-            visualising_harvested_clusters(harvested,full_image)
-            
+            j += 1    
 
         #Saving image in various forms
         save_image(working_folder,full_image,img_num)
         if cluster_sizing_option:
             #Saving sizing image
             save_sizing_image(working_folder,sizing_image,img_num)
-            cluster_segments.append([])
-            #Update cluster csv
-            write_cluster_sizing(cluster_segments[-1],working_folder)
+            #Searate each image in cluster csv
+            write_cluster_sizing([],working_folder)
             #Saving the image information in numpy array format
             if array_option:
                 save_image_array(full_image,polygons[-1],working_folder,img_num)
 
         #Equalizing polygon list
         polygons, polygons_info = equalize_polygons(polygons,polygons_info)
+
+        #Creating post-processing bbox baseline
+        if not post_harvest_polygons_info_base:
+            post_harvest_polygons_info_base = copy.deepcopy(polygons_info[-1])
+        else:
+            for i in range(len(polygons_info[-1])):
+                if polygons_info[-1][i]==[0]:
+                    continue
+                if i<len(post_harvest_polygons_info_base):
+                    post_harvest_polygons_info_base[i] = copy.deepcopy(polygons_info[-1][i])
+                else:
+                    post_harvest_polygons_info_base.append(copy.deepcopy(polygons_info[-1][i]))
 
         #Gathering the information from individual clusters across images to be able to track their growth
         if tracking_option:
@@ -280,4 +306,4 @@ if env_option:
         
 #Plotting the growth curves
 if tracking_option:
-    plot_growth(polygons,lines)
+    plot_growth(polygons,lines,working_folder)

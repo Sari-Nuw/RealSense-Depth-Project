@@ -1,4 +1,3 @@
-import csv
 import cv2
 import math
 from matplotlib import pyplot as plt
@@ -7,7 +6,7 @@ import numpy as np
 import os
 from shapely.geometry import Polygon, LineString
 from shapely import get_coordinates
-from Sorting_utilities import coordinate_iou
+
 
 #Getting pixel sizes across differnet points of the cluster
 def cluster_sizing(bounding,x_diff,y_diff,poly,image,numbering):
@@ -55,22 +54,6 @@ def cluster_sizing(bounding,x_diff,y_diff,poly,image,numbering):
 
 	return segments,numbering
 
-#Establishing cluster_segments excel file
-def establish_cluster_sizing(working_folder):
-	with open(working_folder + '/Cluster_Sizing.csv', 'w',newline='') as csv_file:
-		#Creating the csv writer
-		writer = csv.writer(csv_file)
-		#Writing the first row with all the headers
-		writer.writerow(['Image #','Cluster #','Cluster Pixel Area','Absolute Cluster Area','Label','Cluster Height','Cluster Width','Absolute Height','Absolute Width','Vetical Left','Vertical Middle','Vertical Right','Horizontal Top','Horizontal Middle','Horizontal Bottom'])
-
-#Writing information from precision_metrics to excel file
-def establish_metrics(working_folder):
-	with open(working_folder + '/Precision_Metrics.csv', 'w',newline='') as csv_file:
-		#Creating the csv writer
-		writer = csv.writer(csv_file)
-		#Writing the first row with all the headers
-		writer.writerow(['Image #','Metric Type','mAP','mAR','F1','True Positive [0.5:0.95]','False Positive [0.5:0.95]','False Negative [0.5:0.95]'])
-
 # Making lengths of all polygon arrays equal
 def equalize_polygons(polygons,polygons_info):
 
@@ -89,147 +72,6 @@ def equalize_polygons(polygons,polygons_info):
 		i += 1
 
 	return polygons, polygons_info
-
-#Getting annotations from text file (JSON Coco format)
-def get_annotations(text_file):
-	#Pathway to json file
-	with open(text_file, 'r') as openfile:
-		# Reading from json file
-		object = openfile.read()
-
-	#To store the image_id of the polygons
-	image_id = []
-
-	#Extracting image id's from the json file
-	index = 0
-	while index < len(object):
-		#Find each instance of "image_id":
-		index = object.find('\"image_id\":', index)
-		if index == -1:
-			break
-		#Skip to the number
-		index = index + 11
-		#Isolate and save the number
-		split_index = object.find(',',index)
-		id = object[index:split_index]
-		image_id.append(int(id))
-
-	#To store the polygon values linked to each image
-	images = [[] for _ in range(max(image_id))]
-
-	#Getting the polygon values
-	index = 0
-	#To iterate through the image_ids 
-	id_count = 0 
-	id_index = image_id[id_count] 
-	broke = False
-	while index < len(object):
-		polygons = []
-		current_id = id_index
-		while id_index == current_id:
-			#Finding the polygon segment
-			index = object.find('\"segmentation\":[[', index)
-			if index == -1:
-				break
-			index = index + 17
-			#Isolating the segment
-			split_index = object.find(']',index)
-			bounding = object[index:split_index]
-			bounding = bounding.split()
-			polygons.append(bounding)
-			#Iterating the id_count to know which image the polygon belongs to
-			id_count += 1
-			if id_count < len(image_id):
-				id_index = image_id[id_count]
-			else:
-				broke = True
-				id_index += 1
-				break
-		#Saving the polygons to the correct image number
-		images[id_index-2].append(polygons)
-		if broke:
-			break
-
-	#Converting the polygons from string to int and pairing each two x,y values
-	images_int = []
-	for image in images:
-		polygons_int = []
-		for polygons in image[0]:
-			polygons = polygons[0]
-			index = 0
-			pair = []
-			polygon_int = []
-			while index < len(polygons):
-				split_index = polygons.find(',',index)
-				if split_index == -1:
-					num = polygons[index:]
-					index = len(polygons)
-				else:
-					num = polygons[index:split_index]
-					index = split_index + 1
-				pair.append(int(float(num)))
-				if len(pair) == 2:
-					polygon_int.append(pair)
-					pair = []
-			polygons_int.append(np.asarray(polygon_int))
-		images_int.append(polygons_int)
-		
-	return images_int
-
-#Process annotation metrices for each image
-def get_annotation_metrics(annotations,polygons):
-
-	#Storing true positive, false positive, and false negative values at different iou threshold values
-	TP_array = []
-	FP_array = []
-	FN_array = []
-
-	#Iterating between iou_threshold of 0.5-0.95 to calculate the mAP,mAR, and F1-score
-	iou_threshold = 0.5
-	while iou_threshold < 1:
-		#Track true positive detections
-		TP = 0
-		#To check whether an annotation/polygon have been recognized/matched 
-		annotations_check = [False for _ in range(len(annotations))]
-		i = 0
-		for polygon in polygons:
-			#To iterate across annotation check
-			i = 0
-			for annotation in annotations:
-				iou = coordinate_iou(annotation,polygon)
-				if iou >= iou_threshold:
-					#Each annotation should only be detected once. Extra detections ae false positives
-					if annotations_check[i] == False:
-						TP += 1
-						annotations_check[i] = True
-				i += 1
-	
-		#False Negative. Annotation was never detected
-		FN = len(annotations) - TP
-
-		#False positive. Polygon was detected where there should not be a detection
-		FP = len(polygons) - TP
-
-		#Saving the metrics at this interval
-		TP_array.append(TP)
-		FP_array.append(FP)
-		FN_array.append(FN) 
-
-		iou_threshold += 0.05
-
-	#Precison and recall arrays
-	precision_array = []
-	recall_array = []
-	for i in range(len(TP_array)):
-		precision_array.append(TP_array[i]/(TP_array[i]+FP_array[i]))
-		recall_array.append(TP_array[i]/(TP_array[i]+FN_array[i]))
-
-	#Mean average precision and mean average recall
-	mAP = sum(precision_array)/len(precision_array)
-	mAR = sum(recall_array)/len(recall_array)
-	F1 = (2*mAP*mAR)/(mAP+mAR)
-
-	return mAP, mAR, F1, TP_array, FP_array, FN_array
 
 #Clipping sizing lines down to the proper size based on cluster
 def line_clip(line,poly,image,numbering):
@@ -355,7 +197,7 @@ def pixel_absolute_area(pixel_area,averaged_length_pixels,substrate_real_size = 
 	return pixel_area*substrate_real_size*substrate_real_size/(averaged_length_pixels*averaged_length_pixels)
 
 #Plotting the growth curves
-def plot_growth(polygons,lines):
+def plot_growth(polygons,lines,working_folder):
 
 	#Initializing x-axis
 	x_axis = np.linspace(0,len(lines[-1]),num = len(lines[-1]))
@@ -366,9 +208,10 @@ def plot_growth(polygons,lines):
 	for i in range(len(polygons[-1])):
 		axs.plot(x_axis,lines[i], label = 'Cluster {}'.format(i),color=colors(i))
 	#Displaying the graphs
-	axs.set_xlabel('Image')
+	axs.set_xlabel('Image Number')
 	axs.set_ylabel('Relative Size by Pixel Number')
 	axs.legend()
+	plt.savefig(working_folder + 'Cluster Growth Curves.png')
 	plt.show()
 
 #Isolate the cluster from the original image
@@ -402,7 +245,7 @@ def process_cluster(image_copy,poly,bounding,working_folder,i,j):
 	local_poly[:,0] = local_poly[:,0] - minx*limit_decrease
 	local_poly[:,1] = local_poly[:,1] - miny*limit_decrease
 	#Saving the bounded section of the image
-	cv2.polylines(box_image, np.int32([local_poly]), True, (255, 0, 0), 5)
+	cv2.polylines(box_image, np.int32([local_poly]), True, (255, 0, 0), 10)
 
 	#Saving isolated cluster image
 	os.makedirs(working_folder + "/Cluster/",exist_ok=True)
@@ -410,19 +253,36 @@ def process_cluster(image_copy,poly,bounding,working_folder,i,j):
 
 	return box_image,local_poly
 
+# def save_annotation_image(img,working_folder,annotations,img_num):
+
+# 	annotation_img = img.copy()
+# 	i = 0
+# 	for annotation in annotations[img_num]:
+# 		centre = Polygon(annotation).centroid
+# 		cv2.polylines(annotation_img, np.int32([annotation]), True, (255, 0, 0), 10)
+# 		cv2.putText(annotation_img, '{}'.format(i), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
+# 		i += 1
+
+# 	#Saving image with annotations outlined
+# 	cv2.imwrite(working_folder + "/Annotated/image ({}).JPG".format(img_num+1), cv2.cvtColor(annotation_img,cv2.COLOR_RGB2BGR))
+
 def save_annotation_image(img,working_folder,annotations,img_num):
 
 	annotation_img = img.copy()
 	for annotation in annotations[img_num]:
-		cv2.polylines(annotation_img, np.int32([annotation]), True, (255, 0, 0), 5)
+		id = annotation[1]
+		annotation = annotation[0]
+		centre = Polygon(annotation).centroid
+		cv2.polylines(annotation_img, np.int32([annotation]), True, (255, 0, 0), 10)
+		cv2.putText(annotation_img, '{}'.format(id), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
 
 	#Saving image with annotations outlined
 	cv2.imwrite(working_folder + "/Annotated/image ({}).JPG".format(img_num+1), cv2.cvtColor(annotation_img,cv2.COLOR_RGB2BGR))
 
 #Saving the image information for an individual cluster in numpy array format
 def save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_folder,i,j):
-	cv2.polylines(sizing_image, np.int32([poly]), True, (255, 0, 0), 5)
-	cv2.putText(sizing_image, str(j), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
+	cv2.polylines(sizing_image, np.int32([poly]), True, (255, 0, 0), 10)
+	cv2.putText(sizing_image, str(j), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
 	#Localizing polygon mask
 	binary_mask = np.zeros((box_image.shape[0],box_image.shape[1]),int)
 	for point in local_poly:
@@ -462,43 +322,15 @@ def save_unsorted_image(img,polygons,working_folder,img_num):
 	i = 0
 	for poly in polygons[-1]:
 		centre = Polygon(poly).centroid
-		cv2.polylines(unsorted_img, np.int32([poly]), True, (255, 0, 0), 5)
-		#cv2.putText(unsorted_img, 'Pred {} {}'.format(i,poly[0]), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
-		cv2.putText(unsorted_img, 'Pred {}'.format(i), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
+		cv2.polylines(unsorted_img, np.int32([poly]), True, (255, 0, 0), 10)
+		cv2.putText(unsorted_img, 'Pred {} {}'.format(i,poly[0]), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 4, cv2.LINE_AA)
+		#cv2.putText(unsorted_img, 'Pred {}'.format(i), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
 		i += 1
 
 	# Saving the image with unsorted polygons
 	cv2.imwrite(working_folder + "/Unsorted/image ({}).JPG".format(img_num+1), cv2.cvtColor(unsorted_img,cv2.COLOR_RGB2BGR))
 
-# Drawing harvested cluster outline
-def visualising_harvested_clusters(harvested,full_image):
 
-	if harvested != []:
-		for poly in harvested:
-			poly.reshape(-1,1,2)
-			#Getting the centre point of the polygons
-			centre = Polygon(poly).centroid
-			#Saving the image with outlined clusters (harvested)
-			cv2.polylines(full_image, np.int32([poly]), True, (0, 0, 255), 5)
-			#cv2.putText(full_image, '{}'.format(poly[0]), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 2, (0,255,0), 3, cv2.LINE_AA)
 
-#Writing information from cluster_segments to excel file
-def write_cluster_sizing(segment,working_folder):
-	with open(working_folder + '/Cluster_Sizing.csv', 'a',newline='') as csv_file:
-		#Creating the csv writer
-		writer = csv.writer(csv_file)
-		#Writing new row
-		if segment == []:
-			writer.writerow('')
-		else:
-			writer.writerow(["img ({})".format(segment[0]),segment[1],segment[2],segment[3],segment[4][0],segment[4][1],segment[4][2],segment[4][3],segment[4][4],segment[5][0],segment[5][1],segment[5][2],segment[5][3],segment[5][4],segment[5][5]])
 
-#Writing information from cluster_segments to excel file
-def write_metrics(working_folder,metric_type,metrics,img_num):
-	with open(working_folder + '/Precision_Metrics.csv', 'a',newline='') as csv_file:
-		#Creating the csv writer
-		writer = csv.writer(csv_file)
-		#Writing new row
-		writer.writerow(["img ({})".format(img_num+1),metric_type,metrics[0],metrics[1],metrics[2], metrics[3],metrics[4],metrics[5]])
-		writer.writerow('')
 

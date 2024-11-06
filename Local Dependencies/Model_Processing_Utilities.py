@@ -1,10 +1,13 @@
 from concave_hull import concave_hull_indexes
+import cv2
 from mmdet.apis import init_detector
 from mmdet.registry import VISUALIZERS
 from mmengine import Config
 import numpy as np
 import os
 import torch 
+
+from Filtration_Utilities import expand_box
 
 #Checking if CUDA is available on the device running the program
 def check_cuda():
@@ -39,6 +42,18 @@ def load_models(configs_folder,mushroom_architecture_selected,substrate_architec
 	visualizer.dataset_meta["palette"][1] = (220, 40, 50)
 
 	return mushroom_model,substrate_model,visualizer
+
+def process_substrate_results(img,substrate_result,working_folder,img_num):
+
+	substrate_img = img.copy()
+
+	#Draw bounding boxes on substrate images
+	for result in substrate_result:
+		sub_result = result["bboxes"].cpu().numpy()[0]
+		cv2.rectangle(substrate_img,(int(sub_result[0]),int(sub_result[1])),(int(sub_result[2]),int(sub_result[3])),(0,0,255),5)
+
+	#Save substrate images
+	cv2.imwrite(working_folder + "/Substrate/images ({}).JPG".format(img_num+1), cv2.cvtColor(substrate_img,cv2.COLOR_RGB2BGR))
 
 #Processing image polygons and information
 def process_results(image_result,averaged_length_pixels, substrate_real_size = 50):
