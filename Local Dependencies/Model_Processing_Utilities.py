@@ -7,8 +7,6 @@ import numpy as np
 import os
 import torch 
 
-from Filtration_Utilities import expand_box
-
 #Checking if CUDA is available on the device running the program
 def check_cuda():
 	if torch.cuda.is_available():

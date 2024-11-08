@@ -101,43 +101,6 @@ def delete_overlapping_with_lower_confidence(result,iou_threshold = 0.2):
 
     return dict_to_det_data_sample(result)
 
-def delete_post_harvesting_areas(result,post_harvest_polygons_info_base,iou_threshold = 0.3):
-    result = result.cpu().numpy().to_dict()
-    to_delete = []
-    for idx in range(len(post_harvest_polygons_info_base)):
-        for idy in range(len(result["pred_instances"]["bboxes"])):
-            prev_bbox = torch.tensor([post_harvest_polygons_info_base[idx][5]], dtype=torch.float)
-            new_bbox = torch.tensor([result["pred_instances"]["bboxes"][idy]], dtype=torch.float)
-
-            iou = bops.box_iou(prev_bbox, new_bbox)
-            if iou==0:
-                continue
-
-            # Compute intersection bbox coordinates
-            x_min_inter = torch.max(prev_bbox[0][0], new_bbox[0][0])
-            y_min_inter = torch.max(prev_bbox[0][1], new_bbox[0][1])
-            x_max_inter = torch.min(prev_bbox[0][2], new_bbox[0][2])
-            y_max_inter = torch.min(prev_bbox[0][3], new_bbox[0][3])        
-
-            # Intersection box
-            intersection_box = torch.tensor([x_min_inter, y_min_inter, x_max_inter, y_max_inter])
-
-            # Check if either of the original boxes is equal to the intersection box
-            is_prev_bbox_equal_with_intersection = (prev_bbox == intersection_box).all().item()
-            is_new_bbox_equal_with_intersection = (new_bbox == intersection_box).all().item()
-
-            # if iou<iou_threshold and (is_box1_equal or is_box2_equal):
-            if iou<iou_threshold and is_new_bbox_equal_with_intersection:
-                to_delete.append(idy)
-
-    ## delete from all components of the result variable the overlapping instances with classification/confidence score
-    result["pred_instances"]["bboxes"] = np.delete(result["pred_instances"]["bboxes"],to_delete, axis=0)
-    result["pred_instances"]["scores"] = np.delete(result["pred_instances"]["scores"],to_delete, axis=0)
-    result["pred_instances"]["masks"] = np.delete(result["pred_instances"]["masks"],to_delete, axis=0)
-    result["pred_instances"]["labels"] = np.delete(result["pred_instances"]["labels"],to_delete, axis=0)
-
-    return dict_to_det_data_sample(result)
-
 def expand_box(box, scale_factor=0.10):
     """
     Expand the bounding box by a given scale factor (default is 10%).
@@ -232,6 +195,6 @@ def harvest_filter(polygons,polygons_info,baseline,margin = 0.05,iou_threshold =
         polygons.pop(i)
         polygons_info.pop(i)
 
-    return polygons, polygons_info
+    return polygons, polygons_info, to_delete
 
     

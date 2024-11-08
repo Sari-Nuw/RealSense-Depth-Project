@@ -44,7 +44,7 @@ configs_folder = "./configs/"
 predicted_images = working_folder + 'predicted_images/'
 
 #Path to images
-test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Timelapse3//"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Timelapse1//"
 
 #Pathway to the environemntal files
 if env_option:
@@ -52,7 +52,7 @@ if env_option:
 
 #Name and pathway to the relevant annotation text file 
 if annotation_option:
-    annotations, sorting_annotations = annotation_tracking('Full3.json')
+    annotations, sorting_annotations = annotation_tracking('Full1.json')
 
 # Creating the output folders
 os.makedirs(working_folder,exist_ok=True)
@@ -97,12 +97,20 @@ averaged_length_pixels = []
 #Saving the annotation metrics
 presort_metrics = []
 postsort_metrics = []
+TP_array_presort = []
+FP_array_presort = []
+FN_array_presort = []
+TP_array_postsort = []
+FP_array_postsort = []
+FN_array_postsort = []
 
 # Sorting MOTA Metrics
 mota = []
 # False Positive, False Negative, ID Switch, Ground Truth
-mota_metrics = [[],[],[],[]]
-motaTracker = []
+mota_metrics_50 = [[],[],[],[]]
+mota_metrics_75 = [[],[],[],[]]
+motaTracker_50 = []
+motaTracker_75 = []
 
 #To track cluster sizes
 cluster_segments = []
@@ -181,17 +189,6 @@ for img_num in range(len(os.listdir(test_set_path))):
         if post_harvest_polygons_info_base:
             image_result = delete_post_background_clusters(image_result,substrate_result,post_harvest_polygons_info_base,post_harvest_occluded_iou_overlap)
 
-        # show the results after filtering
-        visualizer.add_datasample(
-            'result',
-            img,
-            data_sample=image_result,
-            draw_gt = None,
-            wait_time=0,
-            out_file=predicted_images + "after_filtration_prediction_" + test_img,
-            pred_score_thr=confidence_score_threshold
-        )
-
         #Processing of reuslts for use in different data structures
         results, results_info = process_results(image_result,averaged_length_pixels,substrate_real_size = 50)     
 
@@ -202,8 +199,8 @@ for img_num in range(len(os.listdir(test_set_path))):
         #Pre-sorting annotation metrics
         if annotation_option:
             # Processing instance segmentation metrics after filtration/before sorting
-            mAP, mAR, AP50, AP75, F1 ,TP, FP, FN = get_annotation_metrics(annotations[img_num],polygons[-1])
-            presort_metrics.append([mAP,mAR, AP50, AP75, F1,TP,FP,FN])
+            mAP, mAR, AP50, AP75, F1 ,TP_array_presort, FP_array_presort, FN_array_presort = get_annotation_metrics(annotations[img_num],polygons[-1],TP_array_presort, FP_array_presort, FN_array_presort)
+            presort_metrics.append([mAP,mAR, AP50, AP75, F1,TP_array_presort[-1],FP_array_presort[-1],FN_array_presort[-1]])
             write_metrics(working_folder,'Presort',presort_metrics[-1],img_num)
             # Saving image with outlined annotations
             save_annotation_image(img,working_folder,sorting_annotations,img_num)
@@ -212,7 +209,26 @@ for img_num in range(len(os.listdir(test_set_path))):
         if tracking_option:
 
             # Filter out recognized harvested clusters
-            polygons[-1], polygons_info[-1] = harvest_filter(polygons[-1],polygons_info[-1],baseline,harvest_margin,harvest_threshold)
+            polygons[-1], polygons_info[-1], to_delete = harvest_filter(polygons[-1],polygons_info[-1],baseline,harvest_margin,harvest_threshold)
+
+            image_result = image_result.cpu().numpy().to_dict()
+            ## delete from all components of the result variable that are post-harvesting area
+            image_result["pred_instances"]["bboxes"] = np.delete(image_result["pred_instances"]["bboxes"],to_delete, axis=0)
+            image_result["pred_instances"]["scores"] = np.delete(image_result["pred_instances"]["scores"],to_delete, axis=0)
+            image_result["pred_instances"]["masks"] = np.delete(image_result["pred_instances"]["masks"],to_delete, axis=0)
+            image_result["pred_instances"]["labels"] = np.delete(image_result["pred_instances"]["labels"],to_delete, axis=0)
+            image_result = dict_to_det_data_sample(image_result)
+
+            # show the results after filtering
+            visualizer.add_datasample(
+                'result',
+                img,
+                data_sample=image_result,
+                draw_gt = None,
+                wait_time=0,
+                out_file=predicted_images + "after_filtration_prediction_" + test_img,
+                pred_score_thr=confidence_score_threshold
+            )
 
             # Show results after filtering and before sorting
             save_unsorted_image(img,polygons,working_folder,img_num)
@@ -228,10 +244,10 @@ for img_num in range(len(os.listdir(test_set_path))):
 
         #Post sorting annotation metrics
         if annotation_option:
-            mAP, mAR, AP50, AP75, F1, TP, FP, FN = get_annotation_metrics(annotations[img_num],polygons[-1])
-            mota_metrics, motaTracker = get_sorting_metrics(sorting_annotations[img_num],polygons[-1],mota_metrics,motaTracker)
-            write_mota(working_folder,mota_metrics,img_num)
-            postsort_metrics.append([mAP,mAR, AP50, AP75, F1,TP,FP,FN])
+            mAP, mAR, AP50, AP75, F1, TP_array_postsort, FP_array_postsort, FN_array_postsort = get_annotation_metrics(annotations[img_num],polygons[-1],TP_array_postsort, FP_array_postsort, FN_array_postsort)
+            mota_metrics_50, mota_metrics_75, motaTracker_50, motaTracker_75 = get_sorting_metrics(sorting_annotations[img_num],polygons[-1],mota_metrics_50,mota_metrics_75,motaTracker_50,motaTracker_75)
+            write_mota(working_folder,mota_metrics_50, mota_metrics_75,img_num)
+            postsort_metrics.append([mAP,mAR, AP50, AP75, F1,TP_array_postsort[-1],FP_array_postsort[-1],FN_array_postsort[-1]])
             write_metrics(working_folder,'Postsort',postsort_metrics[-1],img_num)
         
         #Saving the images with predicted polygons

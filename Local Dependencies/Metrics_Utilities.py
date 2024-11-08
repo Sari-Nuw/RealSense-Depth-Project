@@ -89,7 +89,7 @@ def establish_mota(working_folder):
 		#Creating the csv writer
 		writer = csv.writer(csv_file)
 		#Writing the first row with all the headers
-		writer.writerow(['Image #','MOTA','FP','Cumulative FP','FN','Cumulative FN','IDS', 'Cumulative IDS','GT','Cumulative GT'])
+		writer.writerow(['Image #','MOTA 50','FP 50','Cumulative FP 50','FN 50','Cumulative FN 50','IDS 50', 'Cumulative IDS 50','GT 50','Cumulative GT 50','MOTA 75','FP 75','Cumulative FP 75','FN 75','Cumulative FN 75','IDS 75', 'Cumulative IDS 75','GT 75','Cumulative GT 75'])
 
 #Getting annotations from text file (JSON Coco format)
 def get_annotations_json(text_file):
@@ -122,160 +122,204 @@ def get_annotations_json(text_file):
 	return annotations, sorting_annotations
 
 #Process annotation metrices for each image
-def get_annotation_metrics(annotations,polygons):
+def get_annotation_metrics(annotations,polygons,TP_array, FP_array, FN_array):
 
-	# Removing placeholder [0] from list for metrics
-	polygon_metrics = []
-	for poly in polygons:
-		if len(poly) > 1:
-			polygon_metrics.append(poly)
+    # Removing placeholder [0] from list for metrics
+    polygon_metrics = []
+    for poly in polygons:
+        if len(poly) > 1:
+            polygon_metrics.append(poly)
 
-	#Storing true positive, false positive, and false negative values at different iou threshold values
-	TP_array = []
-	FP_array = []
-	FN_array = []
+    #Storing true positive, false positive, and false negative values at different iou threshold values
+    TP_array_current = []
+    FP_array_current = []
+    FN_array_current = []
 
-	#Iterating between iou_threshold of 0.5-0.95 to calculate the mAP,mAR, and F1-score
-	iou_threshold = 0.5
-	j = 0
-	while iou_threshold < 1:
-		#Track true positive detections
-		TP = 0
-		#To check whether an annotation/polygon have been recognized/matched 
-		annotations_check = [False for _ in range(len(annotations))]
-		i = 0
-		for polygon in polygon_metrics:
-			#To iterate across annotation check
-			i = 0
-			for annotation in annotations:
-				iou = coordinate_iou(annotation,polygon)
-				if iou >= iou_threshold:
-					#Each annotation should only be detected once. Extra detections ae false positives
-					if annotations_check[i] == False:
-						TP += 1
-						annotations_check[i] = True
-				i += 1
-	
-		#False Negative. Annotation was never detected
-		FN = len(annotations) - TP
+    #Iterating between iou_threshold of 0.5-0.95 to calculate the mAP,mAR, and F1-score
+    iou_threshold = 0.5
+    j = 0
+    while iou_threshold < 1:
+        #Track true positive detections
+        TP = 0
+        #To check whether an annotation/polygon have been recognized/matched 
+        annotations_check = [False for _ in range(len(annotations))]
+        i = 0
+        for polygon in polygon_metrics:
+            #To iterate across annotation check
+            i = 0
+            for annotation in annotations:
+                iou = coordinate_iou(annotation,polygon)
+                if iou >= iou_threshold:
+                    #Each annotation should only be detected once. Extra detections ae false positives
+                    if annotations_check[i] == False:
+                        TP += 1
+                        annotations_check[i] = True
+                i += 1
 
-		#False positive. Polygon was detected where there should not be a detection
-		FP = len(polygon_metrics) - TP
+        #False Negative. Annotation was never detected
+        FN = len(annotations) - TP
 
-		#Saving the metrics at this interval
-		TP_array.append(TP)
-		FP_array.append(FP)
-		FN_array.append(FN)
+        #False positive. Polygon was detected where there should not be a detection
+        FP = len(polygon_metrics) - TP
 
-		if j == 0:
-			AP50 = TP/(TP+FP)
-		elif j == 5:
-			AP75 = TP/(TP+FP)
+        #Saving the metrics at this interval
+        TP_array_current.append(TP)
+        FP_array_current.append(FP)
+        FN_array_current.append(FN)
 
-		iou_threshold += 0.05
-		j += 1
+        iou_threshold += 0.05
+        j += 1
 
-	#Precison and recall arrays
-	precision_array = []
-	recall_array = []
-	for i in range(len(TP_array)):
-		precision_array.append(TP_array[i]/(TP_array[i]+FP_array[i]))
-		recall_array.append(TP_array[i]/(TP_array[i]+FN_array[i]))
+    TP_array.append(TP_array_current)
+    FP_array.append(FP_array_current)
+    FN_array.append(FN_array_current)
 
-	#Mean average precision and mean average recall
-	mAP = sum(precision_array)/len(precision_array)
-	mAR = sum(recall_array)/len(recall_array)
-	F1 = (2*mAP*mAR)/(mAP+mAR)
+    if j == 0:
+        AP50 = TP/(TP+FP)
+    elif j == 5:
+        AP75 = TP/(TP+FP)
 
-	return mAP, mAR, AP50, AP75, F1, TP_array, FP_array, FN_array
+    #Cumulative across all previous images
+    cum_TP = [0 for _ in range(10)]
+    cum_FP = [0 for _ in range(10)]
+    cum_FN = [0 for _ in range(10)]
+    for i in range(10):
+        for j in range(len(TP_array)):
+             cum_TP[i] = cum_TP[i] + TP_array[j][i]
+             cum_FP[i] = cum_FP[i] + FP_array[j][i] 
+             cum_FN[i] = cum_FN[i] + FN_array[j][i]
 
-def get_sorting_metrics(annotations,polygons,mota_metrics, motaTracker):
+    # print(TP_array)
+    # print(FP_array)
+    # print(FN_array)
+    # print(cum_TP)
+    # print(cum_FP)
+    # print(cum_FN)
 
-    iou_threshold = 0.75
-    FN = 0
-    IDS = 0
+    #Claculating metrics
+    AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
+    AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
+    mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
+    mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
+    F1 = (2*mAP*mAR)/(mAP+mAR)
+             
+
+    # precision_array[i].append(TP_array[i]/(TP_array[i]+FP_array[i]))
+    # recall_array[i].append(TP_array[i]/(TP_array[i]+FN_array[i]))
+
+    # #Mean average precision and mean average recall
+    # mAP = sum(precision_array)/len(precision_array)
+    # mAR = sum(recall_array)/len(recall_array)
+    
+
+    return mAP, mAR, AP50, AP75, F1, TP_array, FP_array, FN_array
+
+def get_sorting_metrics(annotations,polygons,mota_metrics_50,mota_metrics_75, motaTracker_50, motaTracker_75):
+
     GT = len(annotations)
-    mota_metrics[3].append(GT)
-    # Track how many of the polygons have corresponding ground truth annotations
-    polygon_check = 0
+    mota_metrics_50[3].append(GT)
+    mota_metrics_75[3].append(GT)
 
     max_id = -1
     for annotation in annotations:
             if annotation[1] > max_id:
                 max_id = annotation[1]
 	
-    #if len(motaTracker) > 0:
-    print('length', len(polygons), len(annotations))
-    mota_id = [[] for _ in range(max(len(polygons),len(annotations)))]
-    # else:
-    #     mota_id = [[] for _ in range(len(polygons))]
+    i = 0
+    while i < 2:
+        if i == 0:
+            iou_threshold = 0.5
+        elif i ==1:
+            iou_threshold = 0.75
+        mota_id = [[] for _ in range(max(len(polygons),len(annotations)))]
+        # Track how many of the polygons have corresponding ground truth annotations
+        polygon_check = 0
+        FN = 0
+        IDS = 0
+        for annotation in annotations:
 
-    for annotation in annotations:
+            tracking_id = annotation[1]
+            annotation = annotation[0]			
+            # To check if an annotation has been tracked
+            annotation_tracked = False
+            max_iou = 0
+            index = 0
+            max_index = -1
+            for polygon in polygons:
 
-        tracking_id = annotation[1]
-        annotation = annotation[0]			
-        # To check if an annotation has been tracked
-        annotation_tracked = False
-        max_iou = 0
-        index = 0
-        max_index = -1
-        for polygon in polygons:
+                if len(polygon) > 1:
 
-            if len(polygon) > 1:
+                    iou = coordinate_iou(annotation,polygon)
+                
+                    if iou > iou_threshold:
+                        # Increment polygon check (max once per annotation)
+                        if not annotation_tracked:
+                            polygon_check += 1
+                        # Annotation has been tracked
+                        annotation_tracked = True
+                        # In case of overlapping annotations
+                        if iou > max_iou:
+                            max_iou = iou
+                            max_index = index
 
-                iou = coordinate_iou(annotation,polygon)
+                index += 1
             
-                if iou > iou_threshold:
-                    # Increment polygon check (max once per annotation)
-                    if not annotation_tracked:
-                        polygon_check += 1
-                    # Annotation has been tracked
-                    annotation_tracked = True
-                    # In case of overlapping annotations
-                    if iou > max_iou:
-                        max_iou = iou
-                        max_index = index
+            if max_index != -1:
+                mota_id[max_index].append(tracking_id)
+                #Check that tracker has been established
+                if i == 0:
+                    if len(motaTracker_50) > 0:
+                        #Check that tracker isn't being compared to a new cluster
+                        if len(motaTracker_50[-1]) > max_index: 
+                            print('check50')
+                            print(motaTracker_50[-1])
+                            print(max_index)
+                            if len(motaTracker_50[-1][max_index]) > 0 and motaTracker_50[-1][max_index][0] != tracking_id:
+                                print('id check')
+                                print(motaTracker_50[-1][max_index], tracking_id)
+                                IDS += 1
+                elif i == 1:
+                    if len(motaTracker_75) > 0:
+                        #Check that tracker isn't being compared to a new cluster
+                        if len(motaTracker_75[-1]) > max_index: 
+                            print('check75')
+                            print(motaTracker_75[-1])
+                            print(max_index)
+                            if len(motaTracker_75[-1][max_index]) > 0 and motaTracker_75[-1][max_index][0] != tracking_id:
+                                print('id check')
+                                print(motaTracker_75[-1][max_index], tracking_id)
+                                IDS += 1
 
-            index += 1
+            # Annotation has not been tracked	
+            if not annotation_tracked:
+                FN += 1
+
+        polygon_count = 0
+        for polygon in polygons:
+            if len(polygon) > 1:
+                polygon_count += 1
+
+        FP = polygon_count - polygon_check
+
+        if i == 0:
+            mota_metrics_50[0].append(FP)
+            mota_metrics_50[1].append(FN)
+            mota_metrics_50[2].append(IDS)
+            motaTracker_50.append(mota_id)
+        elif i == 1:
+            mota_metrics_75[0].append(FP)
+            mota_metrics_75[1].append(FN)
+            mota_metrics_75[2].append(IDS)
+            motaTracker_75.append(mota_id)
         
-        if max_index != -1:
-            mota_id[max_index].append(tracking_id)
-            #Check that tracker has been established
-            if len(motaTracker) > 0:
-				#Check that tracker isn't being compared to a new cluster
-                if len(motaTracker[-1]) < max_index: 
-                    print('check')
-                    print(motaTracker[-1])
-                    print(max_index)
-                    if len(motaTracker[-1][max_index]) > 0 and motaTracker[-1][max_index][0] != tracking_id:
-                        print('id check')
-                        print(motaTracker[-1][max_index], tracking_id)
-                        IDS += 1
+        i += 1
 
-        # Annotation has not been tracked	
-        if not annotation_tracked:
-            FN += 1
+    # print(mota_metrics_50)
+    # print(mota_metrics_75)
+    # print(motaTracker_50)
+    # print(motaTracker_75)
 
-    polygon_count = 0
-    for polygon in polygons:
-        if len(polygon) > 1:
-            polygon_count += 1
-
-    FP = polygon_count - polygon_check
-
-    mota_metrics[0].append(FP)
-    mota_metrics[1].append(FN)
-    mota_metrics[2].append(IDS)
-
-    motaTracker.append(mota_id)
-
-    print('mota')
-    print(mota_id)
-    print(FP)
-    print(FN)
-    print(IDS)
-
-    return mota_metrics, motaTracker
+    return mota_metrics_50, mota_metrics_75, motaTracker_50, motaTracker_75
 
 #Writing information from cluster_segments to excel file
 def write_cluster_sizing(segment,working_folder):
@@ -294,20 +338,27 @@ def write_metrics(working_folder,metric_type,metrics,img_num):
 		#Creating the csv writer
 		writer = csv.writer(csv_file,lineterminator='\n')
 		#Writing new row
-		writer.writerow(["img ({})".format(img_num+1),metric_type,metrics[0],metrics[1],metrics[2], metrics[3],metrics[4],metrics[5],metrics[6],metrics[7]])
+		writer.writerow(["img ({})".format(img_num+1),metric_type,round(metrics[0],2),round(metrics[1],2),round(metrics[2],2), round(metrics[3],2),round(metrics[4],2),metrics[5],metrics[6],metrics[7]])
 
 #Writing information from cluster_segments to excel file
-def write_mota(working_folder,metrics,img_num):
+def write_mota(working_folder,mota_metrics_50, mota_metrics_75,img_num):
 
-	cum_FP = sum(metrics[0])
-	cum_FN = sum(metrics[1])
-	cum_IDS = sum(metrics[2])
-	cum_GT = sum(metrics[3])
+    cum_FP_50 = sum(mota_metrics_50[0])
+    cum_FN_50 = sum(mota_metrics_50[1])
+    cum_IDS_50 = sum(mota_metrics_50[2])
+    cum_GT_50 = sum(mota_metrics_50[3])
 
-	mota = 1 - ((cum_FP + cum_FN + cum_IDS)/cum_GT)
+    mota_50 = 1 - ((cum_FP_50 + cum_FN_50 + cum_IDS_50)/cum_GT_50)
+        
+    cum_FP_75 = sum(mota_metrics_75[0])
+    cum_FN_75 = sum(mota_metrics_75[1])
+    cum_IDS_75 = sum(mota_metrics_75[2])
+    cum_GT_75 = sum(mota_metrics_75[3])
 
-	with open(working_folder + '/MOTA_Metrics.csv', 'a') as csv_file:
-		#Creating the csv writer
-		writer = csv.writer(csv_file,lineterminator='\n')
-		#Writing new row
-		writer.writerow(["img ({})".format(img_num+1),mota,metrics[0][-1],cum_FP,metrics[1][-1],cum_FN,metrics[2][-1],cum_IDS,metrics[3][-1],cum_GT])
+    mota_75 = 1 - ((cum_FP_75 + cum_FN_75 + cum_IDS_75)/cum_GT_75)
+
+    with open(working_folder + '/MOTA_Metrics.csv', 'a') as csv_file:
+        #Creating the csv writer
+        writer = csv.writer(csv_file,lineterminator='\n')
+        #Writing new row
+        writer.writerow(["img ({})".format(img_num+1),mota_50,round(mota_metrics_50[0][-1],2),cum_FP_50,mota_metrics_50[1][-1],cum_FN_50,mota_metrics_50[2][-1],cum_IDS_50,mota_metrics_50[3][-1],cum_GT_50,mota_75,round(mota_metrics_75[0][-1],2),cum_FP_75,mota_metrics_75[1][-1],cum_FN_75,mota_metrics_75[2][-1],cum_IDS_75,mota_metrics_75[3][-1],cum_GT_75])
