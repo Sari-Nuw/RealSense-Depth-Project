@@ -199,7 +199,7 @@ for img_num in range(len(os.listdir(test_set_path))):
         #Pre-sorting annotation metrics
         if annotation_option:
             # Processing instance segmentation metrics after filtration/before sorting
-            mAP, mAR, AP50, AP75, F1 ,TP_array_presort, FP_array_presort, FN_array_presort = get_annotation_metrics(annotations[img_num],polygons[-1],TP_array_presort, FP_array_presort, FN_array_presort)
+            mAP, mAR, AP50, AP75, F1 ,TP_array_presort, FP_array_presort, FN_array_presort = get_annotation_metrics(annotations[img_num],polygons[-1],polygons_info[-1],TP_array_presort, FP_array_presort, FN_array_presort)
             presort_metrics.append([mAP,mAR, AP50, AP75, F1,TP_array_presort[-1],FP_array_presort[-1],FN_array_presort[-1]])
             write_metrics(working_folder,'Presort',presort_metrics[-1],img_num)
             # Saving image with outlined annotations
@@ -244,7 +244,7 @@ for img_num in range(len(os.listdir(test_set_path))):
 
         #Post sorting annotation metrics
         if annotation_option:
-            mAP, mAR, AP50, AP75, F1, TP_array_postsort, FP_array_postsort, FN_array_postsort = get_annotation_metrics(annotations[img_num],polygons[-1],TP_array_postsort, FP_array_postsort, FN_array_postsort)
+            mAP, mAR, AP50, AP75, F1, TP_array_postsort, FP_array_postsort, FN_array_postsort = get_annotation_metrics(annotations[img_num],polygons[-1],polygons_info[-1],TP_array_postsort, FP_array_postsort, FN_array_postsort)
             mota_metrics_50, mota_metrics_75, motaTracker_50, motaTracker_75 = get_sorting_metrics(sorting_annotations[img_num],polygons[-1],mota_metrics_50,mota_metrics_75,motaTracker_50,motaTracker_75)
             write_mota(working_folder,mota_metrics_50, mota_metrics_75,img_num)
             postsort_metrics.append([mAP,mAR, AP50, AP75, F1,TP_array_postsort[-1],FP_array_postsort[-1],FN_array_postsort[-1]])

@@ -116,19 +116,23 @@ def get_annotations_json(text_file):
 				pair = []
 		
 		# Full polygon added to corresponding image
-		annotations[annotation['image_id']-1].append(segment)
-		sorting_annotations[annotation['image_id']-1].append([segment,annotation['tracking_id']])
+		annotations[annotation['image_id']-1].append([segment,annotation['category_id']])
+		sorting_annotations[annotation['image_id']-1].append([segment,annotation['tracking_id'],annotation['category_id']])
 
 	return annotations, sorting_annotations
 
 #Process annotation metrices for each image
-def get_annotation_metrics(annotations,polygons,TP_array, FP_array, FN_array):
+def get_annotation_metrics(annotations,polygons,polygons_info,TP_array, FP_array, FN_array):
 
     # Removing placeholder [0] from list for metrics
     polygon_metrics = []
+    polygon_metrics_info = []
+    i = 0
     for poly in polygons:
         if len(poly) > 1:
             polygon_metrics.append(poly)
+            polygon_metrics_info.append(polygons_info[i])
+        i += 1
 
     #Storing true positive, false positive, and false negative values at different iou threshold values
     TP_array_current = []
@@ -137,24 +141,30 @@ def get_annotation_metrics(annotations,polygons,TP_array, FP_array, FN_array):
 
     #Iterating between iou_threshold of 0.5-0.95 to calculate the mAP,mAR, and F1-score
     iou_threshold = 0.5
-    j = 0
+    k = 0
     while iou_threshold < 1:
         #Track true positive detections
         TP = 0
         #To check whether an annotation/polygon have been recognized/matched 
         annotations_check = [False for _ in range(len(annotations))]
-        i = 0
+        j = 0
         for polygon in polygon_metrics:
             #To iterate across annotation check
             i = 0
             for annotation in annotations:
-                iou = coordinate_iou(annotation,polygon)
+                iou = coordinate_iou(annotation[0],polygon)
                 if iou >= iou_threshold:
+                    print('here')
                     #Each annotation should only be detected once. Extra detections ae false positives
+                    #Label condition also being checked
                     if annotations_check[i] == False:
+                         print('check1')
+                    if annotations_check[i] == False and annotation[1] == (polygon_metrics_info[j][0]+1):
+                        print('check2')
                         TP += 1
                         annotations_check[i] = True
                 i += 1
+            j += 1
 
         #False Negative. Annotation was never detected
         FN = len(annotations) - TP
@@ -168,15 +178,15 @@ def get_annotation_metrics(annotations,polygons,TP_array, FP_array, FN_array):
         FN_array_current.append(FN)
 
         iou_threshold += 0.05
-        j += 1
+        k += 1
 
     TP_array.append(TP_array_current)
     FP_array.append(FP_array_current)
     FN_array.append(FN_array_current)
 
-    if j == 0:
+    if k == 0:
         AP50 = TP/(TP+FP)
-    elif j == 5:
+    elif k == 5:
         AP75 = TP/(TP+FP)
 
     #Cumulative across all previous images
@@ -201,16 +211,10 @@ def get_annotation_metrics(annotations,polygons,TP_array, FP_array, FN_array):
     AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
     mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
     mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
-    F1 = (2*mAP*mAR)/(mAP+mAR)
-             
-
-    # precision_array[i].append(TP_array[i]/(TP_array[i]+FP_array[i]))
-    # recall_array[i].append(TP_array[i]/(TP_array[i]+FN_array[i]))
-
-    # #Mean average precision and mean average recall
-    # mAP = sum(precision_array)/len(precision_array)
-    # mAR = sum(recall_array)/len(recall_array)
-    
+    if mAP == 0 and mAR == 0:
+         F1 == 0
+    else:
+        F1 = (2*mAP*mAR)/(mAP+mAR)
 
     return mAP, mAR, AP50, AP75, F1, TP_array, FP_array, FN_array
 
@@ -313,11 +317,6 @@ def get_sorting_metrics(annotations,polygons,mota_metrics_50,mota_metrics_75, mo
             motaTracker_75.append(mota_id)
         
         i += 1
-
-    # print(mota_metrics_50)
-    # print(mota_metrics_75)
-    # print(motaTracker_50)
-    # print(motaTracker_75)
 
     return mota_metrics_50, mota_metrics_75, motaTracker_50, motaTracker_75
 
