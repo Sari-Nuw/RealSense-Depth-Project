@@ -154,13 +154,102 @@ def get_annotation_metrics(annotations,polygons,polygons_info,TP_array, FP_array
             for annotation in annotations:
                 iou = coordinate_iou(annotation[0],polygon)
                 if iou >= iou_threshold:
-                    print('here')
+                    #Each annotation should only be detected once. Extra detections ae false positives
+                    #Label condition also being checked
+                    if annotations_check[i] == False and annotation[1] == (polygon_metrics_info[j][0]+1):
+                        TP += 1
+                        annotations_check[i] = True
+                i += 1
+            j += 1
+
+        #False Negative. Annotation was never detected
+        FN = len(annotations) - TP
+
+        #False positive. Polygon was detected where there should not be a detection
+        FP = len(polygon_metrics) - TP
+
+        #Saving the metrics at this interval
+        TP_array_current.append(TP)
+        FP_array_current.append(FP)
+        FN_array_current.append(FN)
+
+        iou_threshold += 0.05
+        k += 1
+
+    TP_array.append(TP_array_current)
+    FP_array.append(FP_array_current)
+    FN_array.append(FN_array_current)
+
+    if k == 0:
+        AP50 = TP/(TP+FP)
+    elif k == 5:
+        AP75 = TP/(TP+FP)
+
+    #Cumulative across all previous images
+    cum_TP = [0 for _ in range(10)]
+    cum_FP = [0 for _ in range(10)]
+    cum_FN = [0 for _ in range(10)]
+    for i in range(10):
+        for j in range(len(TP_array)):
+             cum_TP[i] = cum_TP[i] + TP_array[j][i]
+             cum_FP[i] = cum_FP[i] + FP_array[j][i] 
+             cum_FN[i] = cum_FN[i] + FN_array[j][i]
+
+    # print(TP_array)
+    # print(FP_array)
+    # print(FN_array)
+    # print(cum_TP)
+    # print(cum_FP)
+    # print(cum_FN)
+
+    #Claculating metrics
+    AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
+    AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
+    mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
+    mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
+    if mAP == 0 and mAR == 0:
+         F1 == 0
+    else:
+        F1 = (2*mAP*mAR)/(mAP+mAR)
+
+    return mAP, mAR, AP50, AP75, F1, TP_array, FP_array, FN_array
+
+#Process annotation metrices for each image
+def get_annotation_metrics_no_label(annotations,polygons,polygons_info,TP_array, FP_array, FN_array):
+
+    # Removing placeholder [0] from list for metrics
+    polygon_metrics = []
+    polygon_metrics_info = []
+    i = 0
+    for poly in polygons:
+        if len(poly) > 1:
+            polygon_metrics.append(poly)
+            polygon_metrics_info.append(polygons_info[i])
+        i += 1
+
+    #Storing true positive, false positive, and false negative values at different iou threshold values
+    TP_array_current = []
+    FP_array_current = []
+    FN_array_current = []
+
+    #Iterating between iou_threshold of 0.5-0.95 to calculate the mAP,mAR, and F1-score
+    iou_threshold = 0.5
+    k = 0
+    while iou_threshold < 1:
+        #Track true positive detections
+        TP = 0
+        #To check whether an annotation/polygon have been recognized/matched 
+        annotations_check = [False for _ in range(len(annotations))]
+        j = 0
+        for polygon in polygon_metrics:
+            #To iterate across annotation check
+            i = 0
+            for annotation in annotations:
+                iou = coordinate_iou(annotation[0],polygon)
+                if iou >= iou_threshold:
                     #Each annotation should only be detected once. Extra detections ae false positives
                     #Label condition also being checked
                     if annotations_check[i] == False:
-                         print('check1')
-                    if annotations_check[i] == False and annotation[1] == (polygon_metrics_info[j][0]+1):
-                        print('check2')
                         TP += 1
                         annotations_check[i] = True
                 i += 1

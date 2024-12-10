@@ -104,6 +104,16 @@ TP_array_postsort = []
 FP_array_postsort = []
 FN_array_postsort = []
 
+#Saving the annotation metrics without considering class label
+presort_metrics_no_label = []
+postsort_metrics_no_label = []
+TP_array_presort_no_label = []
+FP_array_presort_no_label = []
+FN_array_presort_no_label = []
+TP_array_postsort_no_label = []
+FP_array_postsort_no_label = []
+FN_array_postsort_no_label = []
+
 # Sorting MOTA Metrics
 mota = []
 # False Positive, False Negative, ID Switch, Ground Truth
@@ -160,6 +170,7 @@ for img_num in range(len(os.listdir(test_set_path))):
         averaged_length_pixels.append(sum(detected_length_pixels)/len(detected_length_pixels))
 
         # Mushroom segmentation inference
+
         image_result = inference_detector(mushroom_model, img)
 
         #Color correction of the images
@@ -183,6 +194,7 @@ for img_num in range(len(os.listdir(test_set_path))):
             pred_score_thr=confidence_score_threshold
         )
 
+
         # Result filters
         image_result = delete_low_confidence_predictions(image_result,confidence_score_threshold)
         image_result = delete_overlapping_with_lower_confidence(image_result,overlapping_iou_threshold)
@@ -200,8 +212,11 @@ for img_num in range(len(os.listdir(test_set_path))):
         if annotation_option:
             # Processing instance segmentation metrics after filtration/before sorting
             mAP, mAR, AP50, AP75, F1 ,TP_array_presort, FP_array_presort, FN_array_presort = get_annotation_metrics(annotations[img_num],polygons[-1],polygons_info[-1],TP_array_presort, FP_array_presort, FN_array_presort)
+            mAP_no_label, mAR_no_label, AP50_no_label, AP75_no_label, F1_no_label, TP_array_presort_no_label, FP_array_presort_no_label, FN_array_presort_no_label = get_annotation_metrics_no_label(annotations[img_num],polygons[-1],polygons_info[-1],TP_array_presort_no_label, FP_array_presort_no_label, FN_array_presort_no_label)
             presort_metrics.append([mAP,mAR, AP50, AP75, F1,TP_array_presort[-1],FP_array_presort[-1],FN_array_presort[-1]])
+            presort_metrics_no_label.append([mAP_no_label, mAR_no_label, AP50_no_label, AP75_no_label, F1_no_label, TP_array_presort_no_label[-1], FP_array_presort_no_label[-1], FN_array_presort_no_label[-1]])
             write_metrics(working_folder,'Presort',presort_metrics[-1],img_num)
+            write_metrics(working_folder,'Presort No Label',presort_metrics_no_label[-1],img_num)
             # Saving image with outlined annotations
             save_annotation_image(img,working_folder,sorting_annotations,img_num)
 
@@ -245,10 +260,13 @@ for img_num in range(len(os.listdir(test_set_path))):
         #Post sorting annotation metrics
         if annotation_option:
             mAP, mAR, AP50, AP75, F1, TP_array_postsort, FP_array_postsort, FN_array_postsort = get_annotation_metrics(annotations[img_num],polygons[-1],polygons_info[-1],TP_array_postsort, FP_array_postsort, FN_array_postsort)
+            mAP_no_label, mAR_no_label, AP50_no_label, AP75_no_label, F1_no_label, TP_array_postsort_no_label, FP_array_postsort_no_label, FN_array_postsort_no_label = get_annotation_metrics_no_label(annotations[img_num],polygons[-1],polygons_info[-1],TP_array_postsort_no_label, FP_array_postsort_no_label, FN_array_postsort_no_label)
             mota_metrics_50, mota_metrics_75, motaTracker_50, motaTracker_75 = get_sorting_metrics(sorting_annotations[img_num],polygons[-1],mota_metrics_50,mota_metrics_75,motaTracker_50,motaTracker_75)
             write_mota(working_folder,mota_metrics_50, mota_metrics_75,img_num)
             postsort_metrics.append([mAP,mAR, AP50, AP75, F1,TP_array_postsort[-1],FP_array_postsort[-1],FN_array_postsort[-1]])
+            postsort_metrics_no_label.append([mAP_no_label, mAR_no_label, AP50_no_label, AP75_no_label, F1_no_label, TP_array_postsort_no_label[-1], FP_array_postsort_no_label[-1], FN_array_postsort_no_label[-1]])
             write_metrics(working_folder,'Postsort',postsort_metrics[-1],img_num)
+            write_metrics(working_folder,'Postsort No Label',postsort_metrics_no_label[-1],img_num)
         
         #Saving the images with predicted polygons
         #Polygons from current image
