@@ -179,15 +179,15 @@ def line_setup(polygons,lines,img_size):
 					count -= 1
 					j += 1
 
-	#Trimming empty sections of lines 
-	for i in range(len(polygons)):
-		number = False
-		j = 0
-		#Skipping over beggining sections of lines if they are emtpy (nan)
-		while number == False and j < len(lines[i]):
-			if ~np.isnan(lines[i][j]):
-				number = True 
-			j += 1
+	# #Trimming empty sections of lines 
+	# for i in range(len(polygons)):
+	# 	number = False
+	# 	j = 0
+	# 	#Skipping over beggining sections of lines if they are emtpy (nan)
+	# 	while number == False and j < len(lines[i]):
+	# 		if ~np.isnan(lines[i][j]):
+	# 			number = True 
+	# 		j += 1
 
 	return lines
 
@@ -213,6 +213,7 @@ def plot_growth(polygons,lines,working_folder):
 	axs.legend()
 	plt.savefig(working_folder + 'Cluster Growth Curves.png')
 	plt.show()
+
 
 #Isolate the cluster from the original image
 def process_cluster(image_copy,poly,bounding,working_folder,i,j):

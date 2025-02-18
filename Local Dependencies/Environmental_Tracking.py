@@ -10,7 +10,7 @@ def environmental_variable_prep(working_folder,result_path,image_files,cluster_l
     environmental_files = [x for x in environmental_files if x.endswith("csv")]
 
     # Open temperature csv and transform string format of temperature to float
-    temperature = pd.read_csv(working_folder + environmental_files[2])#,skiprows=1)
+    temperature = pd.read_csv(working_folder + environmental_files[2],skiprows=1)
     temperature["temperature1"] = temperature["temperature1"].apply(lambda x: float(x[:-3]) if isinstance(x, str) else x)
     temperature["temperature2"] = temperature["temperature2"].apply(lambda x: float(x[:-3]) if isinstance(x, str) else x)
     # Average the temperatures to get rid of Null values existing in each column
@@ -22,7 +22,7 @@ def environmental_variable_prep(working_folder,result_path,image_files,cluster_l
         temperature = temperature.drop(["temperature1","temperature2"],axis=1)
 
     # Open humidity csv and transform string format of humidity to float
-    humidity = pd.read_csv(working_folder + environmental_files[1])#,skiprows=1)
+    humidity = pd.read_csv(working_folder + environmental_files[1],skiprows=1)
     humidity["relativeHumidity1"] = humidity["relativeHumidity1"].apply(lambda x: float(x[:-1]) if isinstance(x, str) else x)
     humidity["relativeHumidity2"] = humidity["relativeHumidity2"].apply(lambda x: float(x[:-1]) if isinstance(x, str) else x)
     humidity["average_relativeHumidity"] = humidity[["relativeHumidity1","relativeHumidity2"]].mean(axis=1)
@@ -32,7 +32,7 @@ def environmental_variable_prep(working_folder,result_path,image_files,cluster_l
         humidity = humidity.drop(["relativeHumidity1","relativeHumidity2"],axis=1)
 
     # Open co2 csv and transform string format of co2 to float
-    co2 = pd.read_csv(working_folder + environmental_files[0])#,skiprows=1)
+    co2 = pd.read_csv(working_folder + environmental_files[0],skiprows=1)
     co2["co2_1"] = co2["co2_1"].apply(lambda x: float(x[:-4]) if isinstance(x, str) else x)
     co2["co2_2"] = co2["co2_2"].apply(lambda x: float(x[:-4]) if isinstance(x, str) else x)
     co2["average_co2"] = co2[["co2_1","co2_2"]].mean(axis=1)
@@ -79,10 +79,6 @@ def environmental_variable_prep(working_folder,result_path,image_files,cluster_l
             co2.reset_index(drop=True,inplace=True)
         print("-------------")
 
-    # Get the image files
-    # image_files = os.listdir(working_folder)
-    # image_files = [x for x in image_files if x.endswith(image_type)]
-
     # Create a dataframe with the image filename and the date that it was collected (extracted from the image metadata)
     images_df = pd.DataFrame(columns=["Time","filename"])
     for image in image_files:
@@ -125,14 +121,6 @@ def environmental_variable_prep(working_folder,result_path,image_files,cluster_l
     # Concatenate the result with df1
     df1 = pd.concat([df1, result_df], axis=1)
 
-    #Concatenation of the growth curves to the environmental data 
-    result_list = np.array(cluster_lines).T.tolist()
-    cluster_columns = []
-    for i in range(len(result_list[0])):
-        cluster_columns.append('Cluster_#{}'.format(i))
-    result_df = pd.DataFrame(result_list,columns = cluster_columns)
-    df1 = pd.concat([df1,result_df], axis=1)
-
     # Display the result
     df1.to_csv(result_path + 'files_and_env_data.csv', index=False)
 
@@ -146,3 +134,79 @@ def environmental_variable_prep(working_folder,result_path,image_files,cluster_l
         humidity.append(env[4])
         co2.append(env[5])
     return temp,humidity,co2
+
+def environmental_variable_prep_temp_hum(working_folder,result_path,image_files,cluster_lines):
+    working_folder = working_folder +r"\\"
+    # working_folder = "PATH TO FOLDER WHERE THE THREE CSVs AND THE TIMELAPSE IMAGES ARE SAVED"
+    environmental_files = os.listdir(working_folder)
+    environmental_files = [x for x in environmental_files if x.endswith("csv")]
+
+    # Open temperature csv and transform string format of temperature to float
+    temperature = pd.read_csv(working_folder + environmental_files[1])#,skiprows=1)
+    temperature["temperature1"] = temperature["temperature1"].apply(lambda x: float(x[:-3]) if isinstance(x, str) else x)
+    temperature["temperature2"] = temperature["temperature2"].apply(lambda x: float(x[:-3]) if isinstance(x, str) else x)
+    # Average the temperatures to get rid of Null values existing in each column
+    temperature["average_temperature"] = temperature[["temperature1","temperature2"]].mean(axis=1)
+    # deal with the different columns formats of csv depending on the experiment
+    try:    
+        temperature = temperature.drop(["temperature1","temperature2","Harvested Mass for ","entity_id"],axis=1)
+    except:
+        temperature = temperature.drop(["temperature1","temperature2"],axis=1)
+
+    # Open humidity csv and transform string format of humidity to float
+    humidity = pd.read_csv(working_folder + environmental_files[0])#,skiprows=1)
+    humidity["relativeHumidity1"] = humidity["relativeHumidity1"].apply(lambda x: float(x[:-1]) if isinstance(x, str) else x)
+    humidity["relativeHumidity2"] = humidity["relativeHumidity2"].apply(lambda x: float(x[:-1]) if isinstance(x, str) else x)
+    humidity["average_relativeHumidity"] = humidity[["relativeHumidity1","relativeHumidity2"]].mean(axis=1)
+    try:    
+        humidity = humidity.drop(["relativeHumidity1","relativeHumidity2","Harvested Mass for ","entity_id"],axis=1)
+    except:
+        humidity = humidity.drop(["relativeHumidity1","relativeHumidity2"],axis=1)
+
+    # Transform csv date to pandas datetime
+    temperature["Time"] = pd.to_datetime(temperature["Time"],dayfirst=True)#, format = '%d-%m-%Y %H:%M')
+    humidity["Time"] = pd.to_datetime(humidity["Time"],dayfirst=True)#, format = '%d-%m-%Y %H:%M')
+
+    # Create a dataframe with the image filename and the date that it was collected (extracted from the image metadata)
+    images_df = pd.DataFrame(columns=["Time","filename"])
+    for image in image_files:
+        img = Image.open(image)
+        exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
+        # In experiment 3 a problem with the recorded year of the images happened and all have 2016. This makes the first value of the environmentals as the closest existing date to every iamge.
+        # NOTE: Date Time is Year/d/ay/month
+        #images_df.loc[len(images_df.index)] = [pd.to_datetime(exif["DateTimeOriginal"],format = '%Y:%d:%m %H:%M:%S'), image] 
+        images_df.loc[len(images_df.index)] = [pd.to_datetime(exif["DateTimeOriginal"],format = '%Y:%m:%d %H:%M:%S'), image] 
+
+    # Create a combined dataset of image filenames and environmental data, based on the closest existing date.
+    # Function to find the closest datetime in another DataFrame along with its data
+    def find_closest_datetime(dt, other_df,data_column_name):
+        time_diff = np.abs(other_df['Time'] - dt)
+        closest_index = time_diff.idxmin()
+        closest_datetime = other_df.loc[closest_index, 'Time']
+        closest_data = other_df.loc[closest_index, data_column_name]
+        return closest_datetime, closest_data
+
+    # Apply the function to each row in df1
+    result_list = [find_closest_datetime(row['Time'], temperature, data_column_name="average_temperature") for _, row in images_df.iterrows()]
+    result_df = pd.DataFrame(result_list, columns=['closest_Time', 'closest_average_temperature'])
+    # Concatenate the result with df1
+    df1 = pd.concat([images_df, result_df], axis=1)
+
+    # Apply the function to each row in df1
+    result_list = [find_closest_datetime(row['Time'], humidity, data_column_name="average_relativeHumidity") for _, row in df1.iterrows()]
+    result_df = pd.DataFrame(result_list, columns=['closest_Time', 'closest_average_relativeHumidity'])
+    result_df = result_df.drop(['closest_Time'], axis=1)
+    # Concatenate the result with df1
+    df1 = pd.concat([df1, result_df], axis=1)
+
+    # Display the result
+    df1.to_csv(result_path + 'files_and_env_data.csv', index=False)
+
+    #Returning array with all the environmental data
+    environmental_variables = df1.to_numpy() 
+    temp = []
+    humidity = []
+    for env in environmental_variables:
+        temp.append(env[3])
+        humidity.append(env[4])
+    return temp,humidity

@@ -1,4 +1,5 @@
 from shapely.geometry import Polygon
+import numpy as np
 
 #Sorting clusters for tracking
 def cluster_sort(polygons,polygons_info,baseline):
@@ -8,12 +9,28 @@ def cluster_sort(polygons,polygons_info,baseline):
 		#Check for polygons to set baseline
 		if polygons[-1] != []:
 			i = 0
+			to_delete = []
 			for polygon in polygons[-1]:
-				baseline.append([polygon,polygons_info[i]])
+				#Check that recognised mushrooms are immature
+				if polygons_info[0][i][0] == 0:
+					baseline.append([polygon,polygons_info[0][i]])
+				#Remove mature clusters
+				else:
+					to_delete.append(i)
+				i += 1
+			#New polygons/polygons info with mature clusters removed
+			polygons_cropped = [[]]
+			polygons_info_cropped = [[]]
+			i = 0
+			for base in baseline:
+				if i not in to_delete:
+					polygons_cropped[0].append(base[0])
+					polygons_info_cropped[0].append(base[1])
+				i += 1
 		#Exit the function after establishing baseline or if no polygons
-		return polygons,polygons_info,baseline
+		return polygons_cropped,polygons_info_cropped,baseline,to_delete
 
-	polygons[-1],polygons_info[-1] = polygon_sort(polygons[-1],polygons_info[-1],baseline)
+	polygons[-1],polygons_info[-1], to_delete = polygon_sort(polygons[-1],polygons_info[-1],baseline)
 
 	#Updating baseline
 	for j in range(len(polygons[-1])):
@@ -23,7 +40,7 @@ def cluster_sort(polygons,polygons_info,baseline):
 			else:
 				baseline.append([polygons[-1][j],polygons_info[-1][j]])
 
-	return polygons,polygons_info,baseline
+	return polygons,polygons_info,baseline,to_delete
 
 #Calculating intersection over union for coordiante list 
 def coordinate_iou(poly,base):
@@ -78,14 +95,35 @@ def polygon_sort(polygons,polygons_info,baseline,iou_baseline = 0.2):
 		else:
 			temp[i] = [[0],[0]]
 
-		i += 1   
+		i += 1
 		
 	for i in range(len(polygons)):
 		#Adding new polygons
 		if i not in included:
-			temp.append([polygons[i],polygons_info[i]])
+			if polygons_info[i][0] == 0:
+				temp.append([polygons[i],polygons_info[i]])
 
 	polygons_temp = [x[0] for x in temp]
 	info_temp = [x[1] for x in temp]
 
-	return polygons_temp, info_temp
+	to_delete = []
+
+	i = 0
+	for poly in polygons:
+		included = False
+		for temp in polygons_temp:
+			if np.all(poly[0] == temp[0]):
+				included = True
+		if not included:
+			to_delete.append(i)
+		i += 1
+	
+	print('poly')
+	for poly in polygons:
+		print(poly[0])
+	print('temp')
+	for poly in polygons_temp:
+		print(poly[0])
+	print(to_delete)
+
+	return polygons_temp, info_temp, to_delete

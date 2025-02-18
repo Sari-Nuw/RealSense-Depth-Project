@@ -8,6 +8,7 @@ from Sorting_utilities import *
 from mmdet.apis import inference_detector
 import mmcv
 import copy
+import sys
 
 ###Different utility options###
 
@@ -36,15 +37,19 @@ annotation_option = True
 
 #Names of the instance segmentation models being used
 mushroom_architecture_selected = "mushroom_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
+#mushroom_architecture_selected = "mushroom_instance_segmentation_model_config"
 substrate_architecture_selected = "substrate_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
-
+#substrate_architecture_selected = "substrate_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
 # Set the paths for differnt folders
 working_folder = "./results/" + mushroom_architecture_selected + "/"
-configs_folder = "./configs/"
+configs_folder = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\configs/"
+# sys.path.append(configs_folder)
+# configs_folder = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/configs/"
 predicted_images = working_folder + 'predicted_images/'
 
 #Path to images
 test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Timelapse1//"
+#test_set_path = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Timelapse\Bucket/"
 
 #Pathway to the environemntal files
 if env_option:
@@ -52,7 +57,8 @@ if env_option:
 
 #Name and pathway to the relevant annotation text file 
 if annotation_option:
-    annotations, sorting_annotations = annotation_tracking('Full1.json')
+    annotations, sorting_annotations = annotation_tracking("Full1.json")
+    #annotations, sorting_annotations = annotation_tracking(r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Timelapse\Bucket\annotations.json")
 
 # Creating the output folders
 os.makedirs(working_folder,exist_ok=True)
@@ -139,7 +145,7 @@ for img_num in range(len(os.listdir(test_set_path))):
     #To control which images are being processed
     if img_num > -1 and img_num < 300:
 
-        test_img = 'img ({}).JPG'.format(img_num+1)
+        test_img = 'img ({}).jpg'.format(img_num+1)
 
         #check and adjust brightness
         list_of_brightness.append(brightness(test_set_path + test_img))
@@ -176,8 +182,8 @@ for img_num in range(len(os.listdir(test_set_path))):
         #Color correction of the images
         img = mmcv.image.bgr2rgb(img)
 
-        # Chcecking substrate results and saving substrate image
-        process_substrate_results(img,substrate_result,working_folder,img_num)
+        # # Chcecking substrate results and saving substrate image
+        # process_substrate_results(img,substrate_result,working_folder,img_num)
 
         #saving image for processing and image file names 
         images.append(img)
@@ -193,7 +199,6 @@ for img_num in range(len(os.listdir(test_set_path))):
             out_file=predicted_images + "before_filtration_prediction_" + test_img,
             pred_score_thr=confidence_score_threshold
         )
-
 
         # Result filters
         image_result = delete_low_confidence_predictions(image_result,confidence_score_threshold)
@@ -234,6 +239,20 @@ for img_num in range(len(os.listdir(test_set_path))):
             image_result["pred_instances"]["labels"] = np.delete(image_result["pred_instances"]["labels"],to_delete, axis=0)
             image_result = dict_to_det_data_sample(image_result)
 
+            # Show results after filtering and before sorting
+            save_unsorted_image(img,polygons,working_folder,img_num)
+
+            #Sorting the clusters
+            polygons,polygons_info,baseline,to_delete = cluster_sort(polygons,polygons_info,baseline)
+
+            image_result = image_result.cpu().numpy().to_dict()
+            ## delete from all components of the result variable that are 'new' mature clusters
+            image_result["pred_instances"]["bboxes"] = np.delete(image_result["pred_instances"]["bboxes"],to_delete, axis=0)
+            image_result["pred_instances"]["scores"] = np.delete(image_result["pred_instances"]["scores"],to_delete, axis=0)
+            image_result["pred_instances"]["masks"] = np.delete(image_result["pred_instances"]["masks"],to_delete, axis=0)
+            image_result["pred_instances"]["labels"] = np.delete(image_result["pred_instances"]["labels"],to_delete, axis=0)
+            image_result = dict_to_det_data_sample(image_result)
+
             # show the results after filtering
             visualizer.add_datasample(
                 'result',
@@ -244,12 +263,6 @@ for img_num in range(len(os.listdir(test_set_path))):
                 out_file=predicted_images + "after_filtration_prediction_" + test_img,
                 pred_score_thr=confidence_score_threshold
             )
-
-            # Show results after filtering and before sorting
-            save_unsorted_image(img,polygons,working_folder,img_num)
-
-            #Sorting the clusters
-            polygons,polygons_info,baseline = cluster_sort(polygons,polygons_info,baseline)
 
         #Copying the current image for processing
         image_copy = (img, cv2.COLOR_RGB2BGR)[0]
@@ -333,10 +346,11 @@ for img_num in range(len(os.listdir(test_set_path))):
 
         print('Image {}'.format(img_num+1))
 
-
 #Extracting the environmental variables from the csv files and combining with image data
 if env_option:
     environmental_variable_prep(data_test_set_path,working_folder,image_files, lines)
+
+
         
 #Plotting the growth curves
 if tracking_option:

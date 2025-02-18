@@ -127,6 +127,7 @@ def get_annotation_metrics(annotations,polygons,polygons_info,TP_array, FP_array
     # Removing placeholder [0] from list for metrics
     polygon_metrics = []
     polygon_metrics_info = []
+
     i = 0
     for poly in polygons:
         if len(poly) > 1:
@@ -195,20 +196,13 @@ def get_annotation_metrics(annotations,polygons,polygons_info,TP_array, FP_array
              cum_FP[i] = cum_FP[i] + FP_array[j][i] 
              cum_FN[i] = cum_FN[i] + FN_array[j][i]
 
-    # print(TP_array)
-    # print(FP_array)
-    # print(FN_array)
-    # print(cum_TP)
-    # print(cum_FP)
-    # print(cum_FN)
-
     #Claculating metrics
     AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
     AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
     mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
     mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
     if mAP == 0 and mAR == 0:
-         F1 == 0
+         F1 = 0
     else:
         F1 = (2*mAP*mAR)/(mAP+mAR)
 
@@ -288,20 +282,13 @@ def get_annotation_metrics_no_label(annotations,polygons,polygons_info,TP_array,
              cum_FP[i] = cum_FP[i] + FP_array[j][i] 
              cum_FN[i] = cum_FN[i] + FN_array[j][i]
 
-    # print(TP_array)
-    # print(FP_array)
-    # print(FN_array)
-    # print(cum_TP)
-    # print(cum_FP)
-    # print(cum_FN)
-
     #Claculating metrics
     AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
     AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
     mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
     mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
     if mAP == 0 and mAR == 0:
-         F1 == 0
+         F1 = 0
     else:
         F1 = (2*mAP*mAR)/(mAP+mAR)
 
@@ -364,23 +351,23 @@ def get_sorting_metrics(annotations,polygons,mota_metrics_50,mota_metrics_75, mo
                     if len(motaTracker_50) > 0:
                         #Check that tracker isn't being compared to a new cluster
                         if len(motaTracker_50[-1]) > max_index: 
-                            print('check50')
-                            print(motaTracker_50[-1])
-                            print(max_index)
+                            # print('check50')
+                            # print(motaTracker_50[-1])
+                            # print(max_index)
                             if len(motaTracker_50[-1][max_index]) > 0 and motaTracker_50[-1][max_index][0] != tracking_id:
-                                print('id check')
-                                print(motaTracker_50[-1][max_index], tracking_id)
+                                # print('id check')
+                                # print(motaTracker_50[-1][max_index], tracking_id)
                                 IDS += 1
                 elif i == 1:
                     if len(motaTracker_75) > 0:
                         #Check that tracker isn't being compared to a new cluster
                         if len(motaTracker_75[-1]) > max_index: 
-                            print('check75')
-                            print(motaTracker_75[-1])
-                            print(max_index)
+                            # print('check75')
+                            # print(motaTracker_75[-1])
+                            # print(max_index)
                             if len(motaTracker_75[-1][max_index]) > 0 and motaTracker_75[-1][max_index][0] != tracking_id:
-                                print('id check')
-                                print(motaTracker_75[-1][max_index], tracking_id)
+                                # print('id check')
+                                # print(motaTracker_75[-1][max_index], tracking_id)
                                 IDS += 1
 
             # Annotation has not been tracked	
@@ -450,3 +437,23 @@ def write_mota(working_folder,mota_metrics_50, mota_metrics_75,img_num):
         writer = csv.writer(csv_file,lineterminator='\n')
         #Writing new row
         writer.writerow(["img ({})".format(img_num+1),mota_50,round(mota_metrics_50[0][-1],2),cum_FP_50,mota_metrics_50[1][-1],cum_FN_50,mota_metrics_50[2][-1],cum_IDS_50,mota_metrics_50[3][-1],cum_GT_50,mota_75,round(mota_metrics_75[0][-1],2),cum_FP_75,mota_metrics_75[1][-1],cum_FN_75,mota_metrics_75[2][-1],cum_IDS_75,mota_metrics_75[3][-1],cum_GT_75])
+
+
+#Writing information from cluster_segments to excel file
+def write_growth(lines,working_folder):
+    with open(working_folder + '/Growth_Curves.csv', 'w') as csv_file:
+        #Creating the csv writer
+        writer = csv.writer(csv_file,lineterminator='\n')
+        #Writing image numbers
+        to_write = ['']
+        for img_num in range(len(lines[-1])):
+            to_write.append("img ({})".format(img_num+1))
+        writer.writerow(to_write)
+        #Writing new row
+        cluster_num = 0
+        for line in lines:
+            to_write = ["Cluster #{}".format(cluster_num)]
+            for point in line:
+                to_write.append(point)
+            writer.writerow(to_write)
+            cluster_num += 1
