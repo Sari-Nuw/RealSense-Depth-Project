@@ -197,10 +197,22 @@ def get_annotation_metrics(annotations,polygons,polygons_info,TP_array, FP_array
              cum_FN[i] = cum_FN[i] + FN_array[j][i]
 
     #Claculating metrics
-    AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
-    AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
-    mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
-    mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
+    if cum_TP[0]+cum_FP[0] != 0:
+        AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
+    else:
+        AP50 = 0
+    if cum_TP[5]+cum_FP[5] != 0:
+        AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
+    else:
+        AP75 = 0
+    if sum(cum_TP)+sum(cum_FP) != 0:
+        mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
+    else:
+        mAP = 0
+    if sum(cum_TP)+sum(cum_FN) != 0:
+        mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
+    else:
+        mAR = 0
     if mAP == 0 and mAR == 0:
          F1 = 0
     else:
@@ -283,10 +295,22 @@ def get_annotation_metrics_no_label(annotations,polygons,polygons_info,TP_array,
              cum_FN[i] = cum_FN[i] + FN_array[j][i]
 
     #Claculating metrics
-    AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
-    AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
-    mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
-    mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
+    if cum_TP[0]+cum_FP[0] != 0:
+        AP50 = cum_TP[0]/(cum_TP[0]+cum_FP[0])
+    else:
+        AP50 = 0
+    if cum_TP[5]+cum_FP[5] != 0:
+        AP75 = cum_TP[5]/(cum_TP[5]+cum_FP[5])
+    else:
+        AP75 = 0
+    if sum(cum_TP)+sum(cum_FP) != 0:
+        mAP = sum(cum_TP)/(sum(cum_TP)+sum(cum_FP))
+    else:
+        mAP = 0
+    if sum(cum_TP)+sum(cum_FN) != 0:
+        mAR = sum(cum_TP)/(sum(cum_TP)+sum(cum_FN))
+    else:
+        mAR = 0
     if mAP == 0 and mAR == 0:
          F1 = 0
     else:

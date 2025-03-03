@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
 import os
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import Polygon, LineString, Point
 from shapely import get_coordinates
 
 
@@ -241,16 +241,30 @@ def process_cluster(image_copy,poly,bounding,working_folder,i,j):
 		upperx = int(maxx*limit_increase)
 	#Copying the cropped image section
 	box_image = image_copy[int(miny*limit_decrease) : uppery, int(minx*limit_decrease) : upperx]
+	box_image_copy = box_image.copy()
 	#Converting from the polygon coordinates of the full picture to polygon coordinates in the box image
 	local_poly = poly.copy()
 	local_poly[:,0] = local_poly[:,0] - minx*limit_decrease
 	local_poly[:,1] = local_poly[:,1] - miny*limit_decrease
+	# Creating polygon object to check mask
+	local_polygon = Polygon(local_poly)
+	#Localizing polygon mask
+	binary_mask = np.zeros((box_image.shape[0],box_image.shape[1]),int)
+	#check if each element of image is in the polygon
+	for height in range(box_image.shape[0]):
+		for width in range (box_image.shape[1]):
+			if local_polygon.contains(Point(width,height)):
+				binary_mask[height,width] = 1
+			else:
+				box_image_copy[height,width] = [0,0,0]
+
 	#Saving the bounded section of the image
 	cv2.polylines(box_image, np.int32([local_poly]), True, (255, 0, 0), 10)
 
 	#Saving isolated cluster image
 	os.makedirs(working_folder + "/Cluster/",exist_ok=True)
 	cv2.imwrite(working_folder + "/Cluster/image ({})_cluster ({}).JPG".format(i+1,j), cv2.cvtColor(box_image,cv2.COLOR_RGB2BGR))
+	cv2.imwrite(working_folder + "/Cluster/cropped_image ({})_cluster ({}).JPG".format(i+1,j), cv2.cvtColor(box_image_copy,cv2.COLOR_RGB2BGR))
 
 	return box_image,local_poly
 
@@ -274,8 +288,8 @@ def save_annotation_image(img,working_folder,annotations,img_num):
 		id = annotation[1]
 		annotation = annotation[0]
 		centre = Polygon(annotation).centroid
-		cv2.polylines(annotation_img, np.int32([annotation]), True, (255, 0, 0), 10)
-		cv2.putText(annotation_img, '{}'.format(id), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
+		cv2.polylines(annotation_img, np.int32([annotation]), True, (0, 255, 0), 2)
+		#cv2.putText(annotation_img, '{}'.format(id), (int(centre.x),int(centre.y)), cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
 
 	#Saving image with annotations outlined
 	cv2.imwrite(working_folder + "/Annotated/image ({}).JPG".format(img_num+1), cv2.cvtColor(annotation_img,cv2.COLOR_RGB2BGR))
@@ -288,7 +302,11 @@ def save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_fol
 	binary_mask = np.zeros((box_image.shape[0],box_image.shape[1]),int)
 	for point in local_poly:
 		binary_mask[point[1],point[0]] = 1
+	# print('cluster')
+	# plt.imshow(binary_mask)
+	# plt.show()
 	array = [box_image[:,:,0],box_image[:,:,1],box_image[:,:,2],binary_mask]
+	#plt.imshow(array)
 	os.makedirs(working_folder + "/Arrays/",exist_ok=True)
 	np.save(working_folder + "/Arrays/RGB_image ({})_cluster ({})".format(i+1,j),array)
 

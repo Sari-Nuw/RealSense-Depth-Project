@@ -27,7 +27,7 @@ if cluster_sizing_option:
     tracking_option = True
 
 #Save the prediction information in the form of numpy arrays
-array_option = False
+array_option = True
 if array_option:
     cluster_sizing_option = True
     tracking_option = True
@@ -310,7 +310,7 @@ for img_num in range(len(os.listdir(test_set_path))):
                 #Saving the image information for an individual cluster in numpy array format
                 if array_option:
                     #Isolate and save the cluster from the original image
-                    box_image,local_poly = process_cluster(image_copy,poly,polygons_info[-1][j][5],working_folder,-1,j)
+                    box_image,local_poly = process_cluster(image_copy,poly,polygons_info[-1][j][5],working_folder,img_num,j)
                     save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_folder,img_num,j)
             j += 1    
 
