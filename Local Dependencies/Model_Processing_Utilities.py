@@ -45,7 +45,7 @@ def load_models(configs_folder,mushroom_architecture_selected,substrate_architec
 def load_mushroom_model(configs_folder,mushroom_architecture_selected,use_device):
 	
 	# load the trained model
-	mushroom_best_checkpoint_weights = [x for x in os.listdir(configs_folder) if x.endswith("pth") and x.startswith("mushroom")][0]
+	mushroom_best_checkpoint_weights = [x for x in os.listdir(configs_folder) if mushroom_architecture_selected in x and x.endswith("pth")][0]
 
 	# load the configuration file
 	mushroom_architecture_config_file = configs_folder + [x for x in os.listdir(configs_folder) if mushroom_architecture_selected in x and x.endswith(".py")][0]
@@ -68,9 +68,12 @@ def process_substrate_results(img,substrate_result,working_folder,img_num):
 	substrate_img = img.copy()
 
 	#Draw bounding boxes on substrate images
+	i = 0
 	for result in substrate_result:
 		sub_result = result["bboxes"].cpu().numpy()[0]
 		cv2.rectangle(substrate_img,(int(sub_result[0]),int(sub_result[1])),(int(sub_result[2]),int(sub_result[3])),(0,0,255),5)
+		cv2.putText(substrate_img,'{}'.format(i),(int(sub_result[0]),int(sub_result[1])),cv2.FONT_HERSHEY_COMPLEX, 4, (0,255,0), 6, cv2.LINE_AA)
+		i += 1
 
 	#Save substrate images
 	cv2.imwrite(working_folder + "/Substrate/images ({}).JPG".format(img_num+1), cv2.cvtColor(substrate_img,cv2.COLOR_RGB2BGR))

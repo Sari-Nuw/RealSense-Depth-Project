@@ -131,6 +131,7 @@ def expand_box(box, scale_factor=0.10):
     return expanded_box
 
 def delete_post_background_clusters(result,substrate_result, post_harvest_polygons_info_base,iou_threshold = 0.5):
+
     result = result.cpu().numpy().to_dict()
     substrate_bbox = expand_box(substrate_result.cpu()["bboxes"][0],0.025)
     to_delete = []

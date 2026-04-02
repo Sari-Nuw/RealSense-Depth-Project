@@ -1,4 +1,5 @@
 import cv2
+import copy
 import math
 from matplotlib import pyplot as plt
 import matplotlib.cm as cm
@@ -191,13 +192,139 @@ def line_setup(polygons,lines,img_size):
 
 	return lines
 
+#Gathering the information from individual clusters across images to be able to track their growth
+def line_setup_current(polygons,lines,img_size):
+
+	#Sizing segmented areas from the images
+	mask_sizes = []
+	i = 0
+	for polygon in polygons:
+		#Getting area of each polygon
+		if len(polygon) > 1:
+			segment = round((Polygon(polygon).area/img_size*100),4)
+			mask_sizes.append(segment)
+		else:
+			mask_sizes.append(0)
+		i += 1
+
+	#To store all the different lines based on total number of 'box points' found
+	if lines == []:
+		lines = ([[] for _ in range(len(polygons))])
+	else:
+		while len(lines) < len(mask_sizes):
+			new_line = []
+			while len(new_line) < len(lines[-1]):
+				new_line.append(float('nan'))
+			lines.append(new_line)
+
+	#To update each line
+	for i in range(len(mask_sizes)):
+		if mask_sizes[i] == 0:
+			lines[i].append(float('nan'))
+		else:
+			lines[i].append(mask_sizes[i])
+
+	#Iterating across each line
+	# for line in lines:
+	# 	#Iterating across each point in the lines
+	# 	i = 0
+	# 	while i < len(line):
+	# 		base = line[i]
+	# 		#Skipping beggining section where the region of interest does not exist
+	# 		while math.isnan(base):
+	# 			i += 1
+	# 			if i >= len(line):
+	# 				break
+	# 			base = line[i]
+	# 		#Skipping sections where region of interest is present many times in a row
+	# 		while base >= 0:
+	# 			i += 1
+	# 			if i >= len(line):
+	# 				break
+	# 			base = line[i]
+	# 		#Counting how many times the region of interest was missed
+	# 		count = 1
+	# 		while math.isnan(base):
+	# 			i += 1
+	# 			if i >= len(line):
+	# 				break
+	# 			count += 1
+	# 			base = line[i]
+	# 		#Interpolating and assigning ther interpolated values to the empty sections
+	# 		if i <= len(line):
+	# 			interpolation = (base - line[i-(count)])/count
+	# 			j = 1
+	# 			while count > 1:
+	# 				line[i-j] = base - interpolation*j
+	# 				count -= 1
+	# 				j += 1
+
+	# #Trimming empty sections of lines 
+	# for i in range(len(polygons)):
+	# 	number = False
+	# 	j = 0
+	# 	#Skipping over beggining sections of lines if they are emtpy (nan)
+	# 	while number == False and j < len(lines[i]):
+	# 		if ~np.isnan(lines[i][j]):
+	# 			number = True 
+	# 		j += 1
+
+	return lines
+
 #Conversion of pixel area to 'real' area using real substrate size
 def pixel_absolute_area(pixel_area,averaged_length_pixels,substrate_real_size = 50):
 
 	return pixel_area*substrate_real_size*substrate_real_size/(averaged_length_pixels*averaged_length_pixels)
 
 #Plotting the growth curves
-def plot_growth(polygons,lines,working_folder):
+def plot_growth_derivative(polygons,lines,derivative,working_folder,img_num=1,inflection=0.025):
+
+	# print('lines check 1')
+	# print(lines)
+
+	if derivative == []:
+		derivative = copy.deepcopy(lines)
+	else:
+		for i in range(len(lines)):
+			print(len(lines))
+			if i < len(derivative):
+				val = lines[i].copy()[-1]
+				derivative[i].append(val)
+			else:
+				line = lines[i].copy()
+				derivative.append(line)
+		for i in range(len(lines)):
+			derivative[i][-1] = lines[i][-1] - lines[i][-2]
+		# print('derivative')
+		# print(derivative)
+
+	#Initializing x-axis
+	x_axis = np.linspace(0,len(lines[-1]),num = len(lines[-1]))
+
+	colors = cm.get_cmap('tab20', 20)
+
+	fig, axs = plt.subplots()
+	for i in range(len(polygons[-1])):
+		derivative_lines = copy.deepcopy(lines)
+		for j in range(len(derivative)):
+			for k in range(len(derivative[j])):
+				if derivative[j][k] >= inflection:
+					derivative_lines[j][k] = float('nan')
+		axs.plot(x_axis,lines[i], label = 'Cluster {}'.format(i),color=colors(i))
+		axs.plot(x_axis,derivative_lines[i], 'x',color=colors(i))
+	#Displaying the graphs
+	axs.set_xlabel('Image Number')
+	axs.set_ylabel('Relative Size by Pixel Number')
+	axs.legend()
+	plt.savefig(working_folder + 'Cluster Growth Curves {}.png'.format(img_num))
+	#plt.show()
+	# print('derivative_lines')
+	# print(derivative_lines)
+
+	return derivative
+
+#Plotting the growth curves
+def plot_growth(polygons,lines,working_folder,img_num=1):
 
 	#Initializing x-axis
 	x_axis = np.linspace(0,len(lines[-1]),num = len(lines[-1]))
@@ -211,8 +338,11 @@ def plot_growth(polygons,lines,working_folder):
 	axs.set_xlabel('Image Number')
 	axs.set_ylabel('Relative Size by Pixel Number')
 	axs.legend()
-	plt.savefig(working_folder + 'Cluster Growth Curves.png')
-	plt.show()
+	plt.savefig(working_folder + 'Cluster Growth Curves {}.png'.format(img_num))
+	#plt.show()
+	# print('derivative_lines')
+	# print(derivative_lines)
+
 
 
 #Isolate the cluster from the original image

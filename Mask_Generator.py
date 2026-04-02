@@ -27,7 +27,7 @@ if cluster_sizing_option:
     tracking_option = True
 
 #Save the prediction information in the form of numpy arrays
-array_option = True
+array_option = False
 if array_option:
     cluster_sizing_option = True
     tracking_option = True
@@ -48,8 +48,8 @@ configs_folder = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Mari
 predicted_images = working_folder + 'predicted_images/'
 
 #Path to images
-test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Timelapse1//"
-#test_set_path = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Timelapse\Bucket/"
+test_set_path = r"C:/Users/nuway/OneDrive/Desktop/Realsense Project/Python_Marigold/Timelapse/Experiment 1/Images/"
+#test_set_path = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\Hungary Trials\Images/"
 
 #Pathway to the environemntal files
 if env_option:
@@ -133,6 +133,7 @@ cluster_segments = []
 
 #To track cluster growth
 lines = []
+derivative = []
 
 #Confidence thresholds
 confidence_score_threshold = 0.5
@@ -145,17 +146,18 @@ for img_num in range(len(os.listdir(test_set_path))):
     #To control which images are being processed
     if img_num > -1 and img_num < 300:
 
-        test_img = 'img ({}).jpg'.format(img_num+1)
+        test_img = 'img ({}).JPG'.format(img_num+1)
 
         #check and adjust brightness
         list_of_brightness.append(brightness(test_set_path + test_img))
-        if abs(list_of_brightness[-1] - np.mean(list_of_brightness))>4*np.std(list_of_brightness):
+        if abs(list_of_brightness[-1] - np.mean(list_of_brightness))>5*np.std(list_of_brightness):
             print("Image with outlier brightness (lights on) detected and skipped: ", test_img)
             list_of_brightness.pop()
             continue
 
         # load the image
         img = mmcv.imread(test_set_path + test_img)
+        
         substrate_img = img.copy()
 
         #Extracting time data from the images to be used for environmental tracking
@@ -183,7 +185,7 @@ for img_num in range(len(os.listdir(test_set_path))):
         img = mmcv.image.bgr2rgb(img)
 
         # # Chcecking substrate results and saving substrate image
-        # process_substrate_results(img,substrate_result,working_folder,img_num)
+        process_substrate_results(img,substrate_result,working_folder,img_num)
 
         #saving image for processing and image file names 
         images.append(img)
@@ -203,8 +205,7 @@ for img_num in range(len(os.listdir(test_set_path))):
         # Result filters
         image_result = delete_low_confidence_predictions(image_result,confidence_score_threshold)
         image_result = delete_overlapping_with_lower_confidence(image_result,overlapping_iou_threshold)
-        if post_harvest_polygons_info_base:
-            image_result = delete_post_background_clusters(image_result,substrate_result,post_harvest_polygons_info_base,post_harvest_occluded_iou_overlap)
+        image_result = delete_post_background_clusters(image_result,substrate_result,post_harvest_polygons_info_base,post_harvest_occluded_iou_overlap)
 
         #Processing of reuslts for use in different data structures
         results, results_info = process_results(image_result,averaged_length_pixels,substrate_real_size = 50)     
@@ -311,7 +312,7 @@ for img_num in range(len(os.listdir(test_set_path))):
                 if array_option:
                     #Isolate and save the cluster from the original image
                     box_image,local_poly = process_cluster(image_copy,poly,polygons_info[-1][j][5],working_folder,img_num,j)
-                    save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_folder,img_num,j)
+                    #save_cluster_array(sizing_image,poly,centre,box_image,local_poly,working_folder,img_num,j)
             j += 1    
 
         #Saving image in various forms
@@ -322,14 +323,15 @@ for img_num in range(len(os.listdir(test_set_path))):
             #Searate each image in cluster csv
             write_cluster_sizing([],working_folder)
             #Saving the image information in numpy array format
-            if array_option:
-                save_image_array(full_image,polygons[-1],working_folder,img_num)
+            # if array_option:
+            #     save_image_array(full_image,polygons[-1],working_folder,img_num)
 
         #Equalizing polygon list
         polygons, polygons_info = equalize_polygons(polygons,polygons_info)
 
         #Creating post-processing bbox baseline
         if not post_harvest_polygons_info_base:
+
             post_harvest_polygons_info_base = copy.deepcopy(polygons_info[-1])
         else:
             for i in range(len(polygons_info[-1])):
@@ -342,16 +344,20 @@ for img_num in range(len(os.listdir(test_set_path))):
 
         #Gathering the information from individual clusters across images to be able to track their growth
         if tracking_option:
-            lines = line_setup(polygons[-1],lines,img.size/3)
+            lines = line_setup_current(polygons[-1],lines,img.size/3)
+
+        if tracking_option:
+            derivative = plot_growth(polygons,lines,derivative,working_folder,img_num)
 
         print('Image {}'.format(img_num+1))
+
+#Writing csv file with growth curves
+write_growth(lines,working_folder)
 
 #Extracting the environmental variables from the csv files and combining with image data
 if env_option:
     environmental_variable_prep(data_test_set_path,working_folder,image_files, lines)
-
-
         
 #Plotting the growth curves
 if tracking_option:
-    plot_growth(polygons,lines,working_folder)
+    plot_growth_derivative(polygons,lines,derivative,working_folder)
