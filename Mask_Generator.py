@@ -40,6 +40,7 @@ mushroom_architecture_selected = "mushroom_custom_config_mask_rcnn_convnext-t_p4
 #mushroom_architecture_selected = "mushroom_instance_segmentation_model_config"
 substrate_architecture_selected = "substrate_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
 #substrate_architecture_selected = "substrate_custom_config_mask_rcnn_convnext-t_p4_w7_fpn_fp16_ms-crop_3x_coco"
+
 # Set the paths for differnt folders
 working_folder = "./results/" + mushroom_architecture_selected + "/"
 configs_folder = r"C:\Users\nuway\OneDrive\Desktop\Realsense Project\Python_Marigold\configs/"
